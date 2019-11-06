@@ -1,0 +1,1200 @@
+---
+title: "Bayesian IRT Models for Intelligence Tests"
+author: "Paul Bürkner & Marie Beisemann"
+output:
+  html_document:
+    theme: default
+encoding: UTF-8
+editor_options: 
+  chunk_output_type: console
+---
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+---
+
+# {.tabset}
+
+## Setup
+
+```{r setup, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(cache = FALSE, fig.width = 10)
+```
+
+```{r general_options, cache=FALSE}
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(stringr)
+library(ggplot2)
+library(GGally)
+library(brms)
+library(mirt)
+cores <- 4
+iter <- 3000
+warmup <- 1000
+control <- list(adapt_delta = 0.95)
+options(width = 160)
+theme_set(theme_default())
+```
+
+```{r functions}
+scale2 <- function(x, na.rm = TRUE) {
+  (x - mean(x, na.rm = na.rm)) / sd(x, na.rm = na.rm)
+}
+
+center <- function(x, na.rm = TRUE) {
+  x - mean(x, na.rm = na.rm)
+}
+
+r2z <- function(r) {
+  log((1 + r) / (1 - r)) / 2
+}
+
+z2r <- function(z) {
+  (exp(2 * z) - 1) / (exp(2 * z) + 1)
+}
+
+SW <- suppressWarnings
+
+sum_coding <- function(x, lvls = levels(x)) {
+  # codes the first category with -1
+  nlvls <- length(lvls)
+  stopifnot(nlvls > 1)
+  cont <- diag(nlvls)[, -nlvls, drop = FALSE]
+  cont[nlvls, ] <- -1
+  cont <- cont[c(nlvls, 1:(nlvls - 1)), , drop = FALSE]
+  colnames(cont) <- lvls[-1]
+  x <- factor(x, levels = lvls)
+  contrasts(x) <- cont
+  x
+}
+
+dummy_coding <- function(x, lvls = levels(x)) {
+  x <- factor(x, levels = lvls)
+  contrasts(x) <- contr.treatment(levels(x))
+  x
+}
+
+Sum <- function(df, vars, na.rm = TRUE) {
+  # row-wise sum of variables vars stored in df
+  vars <- enquo(vars)
+  df <- select(df, !!vars)
+  all_na <- apply(df, 1, function(x) all(is.na(x)))
+  out <- rowSums(select(df, !!vars), na.rm = na.rm)
+  ifelse(all_na, NA, out)
+}
+
+Mean <- function(df, vars, na.rm = TRUE) {
+  # row-wise mean of variables vars stored in df
+  vars <- enquo(vars)
+  df <- select(df, !!vars)
+  all_na <- apply(df, 1, function(x) all(is.na(x)))
+  out <- rowMeans(select(df, !!vars), na.rm = na.rm)
+  ifelse(all_na, NA, out)
+}
+```
+
+## Data Preparation
+
+```{r}
+answers <- c(7, 6, 8, 2, 1, 5, 1, 6, 3, 2, 4, 5)
+names(answers) <- paste0("SPM", seq_along(answers))
+```
+
+```{r}
+spm_long <- read.csv("data/dataset.csv")  %>%
+  mutate(id = seq_len(n())) %>%
+  gather("item", "response", SPM1:SPM12) %>%
+  mutate(
+    answer = answers[item],
+    response2 = as.numeric(response == answer),
+    item = as.numeric(sub("^SPM", "", item))
+  )
+```
+
+```{r}
+spm_wide <- spm_long %>% 
+  select(id, item, response2) %>%
+  spread("item", "response2") %>%
+  select(-id)
+```
+
+## Analysis {.tabset}
+
+### 1PL Models {.tabset}
+
+#### Model Fitting
+
+```{r}
+prior_1pl <- 
+  prior("normal(0, 3)", class = "sd", group = "id") + 
+  prior("normal(0, 3)", class = "sd", group = "item")
+
+fit_1pl <- brm(
+  formula = response2 ~ 1 + (1 | item) + (1 | id),
+  data = spm_long,
+  family = brmsfamily("bernoulli", "logit"),
+  prior = prior_1pl,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control,
+  file = "models/fit_1pl"
+)
+
+fit_1pl <- add_loo(fit_1pl)
+```
+
+```{r}
+# obtain basic summaries
+summary(fit_1pl)
+plot(fit_1pl)
+```
+
+```{r, results="hide"}
+mirt_1pl <- mirt(spm_wide, model = 1, itemtype = "Rasch", SE = TRUE,
+                 technical = list(NCYCLES = 10000))
+```
+
+#### Person Parameters
+
+```{r}
+# extract person parameters
+person_pars_1pl <- 
+  ranef(fit_1pl, summary = FALSE)$id[, , "Intercept"] 
+
+person_sds_1pl <- apply(person_pars_1pl, 1, sd)
+
+person_pars_1pl <- person_pars_1pl %>%
+  sweep(1, person_sds_1pl, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_1pl %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 1PL model
+    scale = sd(Estimate) / sd(person_pars_1pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    id = seq_len(n())
+  ) %>%
+  select(-scale)
+```
+
+```{r}
+person_pars_1pl %>%
+  bind_cols(mirt_person_pars_1pl) %>%
+	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-4, 5), y = c(-4, 5)) +
+	labs(
+		x = "Mean (brms)",
+	  y = "Mean (mirt)",
+		color = "SD (brms)"
+	)
+
+person_pars_1pl %>%
+  bind_cols(mirt_person_pars_1pl) %>%
+	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	labs(
+		x = "SD (brms)",
+	  y = "SD (mirt)",
+		color = "Mean (brms)"
+	)
+```
+
+#### Item Parameters
+
+```{r, fig.height=4}
+# extract item parameters
+item_pars_1pl <- coef(fit_1pl, summary = FALSE)$item[, , "Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column() %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  package = "brms"
+	)
+```
+
+```{r}
+mirt_item_pars_1pl <- coef(mirt_1pl, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.d$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    package = "mirt"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+```
+  
+```{r}
+# plot item parameters
+item_pars_1pl %>%
+  bind_rows(mirt_item_pars_1pl) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  scale_x_continuous(breaks = 1:12) +
+	geom_pointrange() +
+  scale_color_manual(name = "Package", values = c("black", "grey")) +
+	coord_flip() +
+	labs(x = "Item Number")
+```
+
+### 2PL Models {.tabset}
+
+#### Model Fitting
+
+```{r}
+formula_2pl <- bf(
+  response2 ~ beta + exp(logalpha) * theta,
+  theta ~ 0 + (1 | id),
+  beta ~ 1 + (1 |i| item),
+  logalpha ~ 1 + (1 |i| item),
+  nl = TRUE
+)
+
+prior_2pl <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha")
+
+fit_2pl <- brm(
+  formula = formula_2pl,
+  data = spm_long,
+  family = brmsfamily("bernoulli", "logit"),
+  prior = prior_2pl,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_2pl"
+)
+
+fit_2pl <- add_loo(fit_2pl)
+```
+
+```{r}
+# obtain some basic summaries
+summary(fit_2pl)
+plot(fit_2pl, pars = c("sd", "cor"))
+```
+
+```{r, results="hide"}
+mirt_2pl <- mirt(spm_wide, model = 1, itemtype = "2PL", SE = TRUE,
+                 technical = list(NCYCLES = 10000))
+```
+
+#### Person Parameters
+
+```{r}
+# extract and scale person parameters
+person_pars_2pl <- 
+  ranef(fit_2pl, summary = FALSE)$id[, , "theta_Intercept"]
+
+person_sds_2pl <- apply(person_pars_2pl, 1, sd)
+
+person_pars_2pl <- person_pars_2pl %>%
+  sweep(1, person_sds_2pl, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_2pl %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    id = seq_len(n())
+  )
+```
+
+```{r}
+# plot comparison of person parameters
+person_pars_2pl %>%
+  bind_cols(mirt_person_pars_2pl) %>%
+	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-4, 5), y = c(-4, 5)) +
+	labs(
+		x = "Mean (brms)",
+	  y = "Mean (mirt)",
+		color = "SD (brms)"
+	)
+
+person_pars_2pl %>%
+  bind_cols(mirt_person_pars_2pl) %>%
+	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	labs(
+		x = "SD (brms)",
+	  y = "SD (mirt)",
+		color = "Mean (brms)"
+	)
+```
+
+#### Item Parameters
+
+```{r, fig.height=4}
+# extract item parameters
+item_pars_2pl <- coef(fit_2pl, summary = FALSE)$item
+
+# plot item parameters
+# locations
+beta <- item_pars_2pl[, , "beta_Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+alpha <- item_pars_2pl[, , "logalpha_Intercept"] %>%
+  exp() %>%
+  sweep(1, person_sds_2pl, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_2pl <- bind_rows(beta, alpha, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(item = as.numeric(item)) %>%
+	mutate(
+	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
+	  package = "brms"  
+	)
+```
+
+```{r, results="hide"}
+mirt_item_pars_2pl <- coef(mirt_2pl, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1"),
+        labels = c("Location", "Slope")
+      ),
+    package = "mirt"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+```
+
+```{r}
+# plot locations and slope next to each other
+item_pars_2pl %>%
+  bind_rows(mirt_item_pars_2pl) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  scale_x_continuous(breaks = 1:12) +
+	facet_wrap("nlpar", scales = "free_x") +
+  geom_pointrange() +
+  scale_color_manual(name = "Package", values = c("black", "grey")) +
+	coord_flip() +
+	labs(x = "Item Number")
+```
+
+### 3PL models with fixed guessing probability {.tabset}
+
+#### Model Fitting
+
+```{r}
+formula_3pl_fixed <- bf(
+  response2 ~ 0.125 + 0.875 * inv_logit(beta + exp(logalpha) * theta),
+  theta ~ 0 + (1 | id),
+  beta ~ 1 + (1 |i| item),
+  logalpha ~ 1 + (1 |i| item),
+  nl = TRUE
+)
+
+prior_3pl_fixed <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha")
+
+fit_3pl_fixed <- brm(
+  formula = formula_3pl_fixed,
+  data = spm_long,
+  family = brmsfamily("bernoulli", "identity"),
+  prior = prior_3pl_fixed,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_3pl_fixed"
+)
+
+fit_3pl_fixed <- add_loo(fit_3pl_fixed)
+```
+
+```{r}
+summary(fit_3pl_fixed)
+```
+
+```{r}
+mirt_3pl_fixed <- mirt(
+  spm_wide, model = 1, itemtype = "2PL", guess = 0.11, 
+  SE = TRUE, technical = list(NCYCLES = 10000)
+)
+```
+
+#### Person Parameters
+
+```{r}
+# extract and scale person parameters
+person_pars_3pl_fixed <- 
+  ranef(fit_3pl_fixed, summary = FALSE)$id[, , "theta_Intercept"]
+
+person_sds_3pl_fixed <- apply(person_pars_3pl_fixed, 1, sd)
+
+person_pars_3pl_fixed <- person_pars_3pl_fixed %>%
+  sweep(1, person_sds_3pl_fixed, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_3pl_fixed %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+mirt_person_pars_3pl_fixed <- 
+  fscores(mirt_3pl_fixed, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    id = seq_len(n())
+  )
+```
+
+```{r}
+# plot comparison of person parameters
+person_pars_3pl_fixed %>%
+  bind_cols(mirt_person_pars_3pl_fixed) %>%
+	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-4, 5), y = c(-4, 5)) +
+	labs(
+		x = "Mean (brms)",
+	  y = "Mean (mirt)",
+		color = "SD (brms)"
+	)
+
+person_pars_3pl_fixed %>%
+  bind_cols(mirt_person_pars_3pl_fixed) %>%
+	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	labs(
+		x = "SD (brms)",
+	  y = "SD (mirt)",
+		color = "Mean (brms)"
+	)
+```
+
+#### Item Parameters
+
+```{r, fig.height=4}
+# extract item parameters
+item_pars_3pl_fixed <- coef(fit_3pl_fixed, summary = FALSE)$item
+
+# locations
+beta <- item_pars_3pl_fixed[, , "beta_Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+alpha <- item_pars_3pl_fixed[, , "logalpha_Intercept"] %>%
+  exp() %>%
+  sweep(1, person_sds_3pl_fixed, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_3pl_fixed <- bind_rows(beta, alpha, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(item = as.numeric(item)) %>%
+	mutate(
+	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
+	  package = "brms"  
+	)
+```
+
+```{r, results="hide"}
+mirt_item_pars_3pl_fixed <- coef(mirt_3pl_fixed, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1"),
+        labels = c("Location", "Slope")
+      ),
+    package = "mirt"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+```
+
+```{r}
+# plot locations and slope next to each other
+item_pars_3pl_fixed %>%
+  bind_rows(mirt_item_pars_3pl_fixed) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  scale_x_continuous(breaks = 1:12) +
+	facet_wrap("nlpar", scales = "free_x") +
+	geom_pointrange() +
+	scale_color_manual(name = "Package", values = c("black", "grey")) +
+	coord_flip() +
+	labs(x = "Item Number")
+```
+
+### 3PL models {.tabset}
+
+#### Model Fitting
+
+```{r}
+formula_3pl <- bf(
+  response2 ~ gamma + (1 - gamma) * 
+    inv_logit(beta + exp(logalpha) * theta),
+  theta ~ 0 + (1 | id),
+  beta ~ 1 + (1 |i| item),
+  logalpha ~ 1 + (1 |i| item),
+  logitgamma ~ 1 + (1 |i| item),
+  nlf(gamma ~ inv_logit(logitgamma)),
+  nl = TRUE
+)
+
+prior_3pl <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(-2, 0.5)", class = "b", nlpar = "logitgamma") +
+  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitgamma")
+
+fit_3pl <- brm(
+  formula = formula_3pl,
+  data = spm_long,
+  family = brmsfamily("bernoulli", "identity"),
+  prior = prior_3pl,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_3pl"
+)
+
+fit_3pl <- add_loo(fit_3pl)
+```
+
+```{r}
+summary(fit_3pl)
+```
+
+```{r, results = "hide"}
+mirt_3pl <- mirt(spm_wide, model = 1, itemtype = "3PL", SE = TRUE,
+                 technical = list(NCYCLES = 10000))
+```
+
+#### Person Parameters
+
+```{r}
+# extract and scale person parameters
+person_pars_3pl <- 
+  ranef(fit_3pl, summary = FALSE)$id[, , "theta_Intercept"]
+
+person_sds_3pl <- apply(person_pars_3pl, 1, sd)
+
+person_pars_3pl <- person_pars_3pl %>%
+  sweep(1, person_sds_3pl, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_3pl %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+mirt_person_pars_3pl <- fscores(mirt_3pl, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    id = seq_len(n())
+  )
+```
+
+```{r}
+# plot comparison of person parameters
+person_pars_3pl %>%
+  bind_cols(mirt_person_pars_3pl) %>%
+	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-4, 5), y = c(-4, 5)) +
+	labs(
+		x = "Mean (brms)",
+	  y = "Mean (mirt)",
+		color = "SD (brms)"
+	)
+
+person_pars_3pl %>%
+  bind_cols(mirt_person_pars_3pl) %>%
+	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	labs(
+		x = "SD (brms)",
+	  y = "SD (mirt)",
+		color = "Mean (brms)"
+	)
+```
+
+#### Item Parameters
+
+```{r, fig.height=4}
+# extract item parameters
+item_pars_3pl <- coef(fit_3pl, summary = FALSE)$item
+
+# plot item parameters
+# locations
+beta <- item_pars_3pl[, , "beta_Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+alpha <- item_pars_3pl[, , "logalpha_Intercept"] %>%
+	exp() %>%
+  sweep(1, person_sds_3pl, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# guessing parameters
+gamma <- item_pars_3pl[, , "logitgamma_Intercept"] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_3pl <- bind_rows(beta, alpha, gamma, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(item = as.numeric(item)) %>%
+	mutate(
+	  nlpar = factor(nlpar, labels = c("Location", "Slope", "Guessing")),
+	  package = "brms"  
+	)
+```
+
+```{r, results="hide"}
+mirt_item_pars_3pl <- coef(mirt_3pl, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d|g)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1", "g"),
+        labels = c("Location", "Slope", "Guessing")
+      ),
+    package = "mirt"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+```
+
+```{r}
+item_pars_3pl %>%
+  bind_rows(mirt_item_pars_3pl) %>%
+  ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  scale_x_continuous(breaks = 1:12) +
+	facet_wrap("nlpar", scales = "free_x") +
+	geom_pointrange() +
+  scale_color_manual(name = "Package", values = c("black", "grey")) +
+	coord_flip() +
+	labs(x = "Item Number")
+```
+
+### 4PL models {.tabset}
+
+#### Model Fitting
+
+```{r}
+formula_4pl <- bf(
+  response2 ~ gamma + (1 - gamma - psi) * 
+    inv_logit(beta + exp(logalpha) * theta),
+  theta ~ 0 + (1 | id),
+  beta ~ 1 + (1 |i| item),
+  logalpha ~ 1 + (1 |i| item),
+  logitgamma ~ 1 + (1 |i| item),
+  nlf(gamma ~ inv_logit(logitgamma)),
+  logitpsi ~ 1 + (1 |i| item),
+  nlf(psi ~ inv_logit(logitpsi)),
+  nl = TRUE
+)
+
+prior_4pl <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(-2, 0.5)", class = "b", nlpar = "logitgamma") +
+  prior("normal(-2, 0.5)", class = "b", nlpar = "logitpsi") +
+  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitgamma") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitpsi")
+
+fit_4pl <- brm(
+  formula = formula_4pl,
+  data = spm_long,
+  family = brmsfamily("bernoulli", "identity"),
+  prior = prior_4pl,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_4pl"
+)
+fit_4pl <- add_loo(fit_4pl)
+```
+
+```{r}
+summary(fit_4pl)
+```
+
+```{r, results="hide"}
+mirt_4pl <- mirt(
+  spm_wide, model = 1, itemtype = "4PL", SE = TRUE,
+  technical = list(NCYCLES = 10000)
+)
+```
+
+#### Person Parameters
+
+```{r}
+# extract and scale person parameters
+person_pars_4pl <- 
+  ranef(fit_4pl, summary = FALSE)$id[, , "theta_Intercept"]
+
+person_sds_4pl <- apply(person_pars_4pl, 1, sd)
+
+person_pars_4pl <- person_pars_4pl %>%
+  sweep(1, person_sds_4pl, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_4pl %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    id = seq_len(n())
+  )
+```
+
+```{r}
+# plot comparison of person parameters
+person_pars_4pl %>%
+  bind_cols(mirt_person_pars_4pl) %>%
+	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-4, 5), y = c(-4, 5)) +
+	labs(
+		x = "Mean (brms)",
+	  y = "Mean (mirt)",
+		color = "SD (brms)"
+	)
+
+person_pars_4pl %>%
+  bind_cols(mirt_person_pars_4pl) %>%
+	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	labs(
+		x = "SD (brms)",
+	  y = "SD (mirt)",
+		color = "Mean (brms)"
+	)
+```
+
+#### Item Parameters
+
+```{r}
+# extract item parameters
+item_pars_4pl <- coef(fit_4pl, summary = FALSE)$item
+
+# locations
+beta <- item_pars_4pl[, , "beta_Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+alpha <- item_pars_4pl[, , "logalpha_Intercept"] %>%
+	exp() %>%
+  sweep(1, person_sds_4pl, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# guessing parameters
+gamma <- item_pars_4pl[, , "logitgamma_Intercept"] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# lapse parameters
+psi <- item_pars_4pl[, , "logitpsi_Intercept"] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_4pl <- bind_rows(beta, alpha, gamma, psi, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(item = as.numeric(item)) %>%
+	mutate(
+	  nlpar = nlpar %>% 
+	    factor(labels = c("Location", "Slope", "Guessing", "Lapse")),
+	  package = "brms"
+	)
+```
+
+```{r, results="hide"}
+mirt_item_pars_4pl <- coef(mirt_4pl, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d|g|u)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1", "g", "u"),
+        labels = c("Location", "Slope", "Guessing", "Lapse")
+      ),
+    # invert guessing parameter
+    par = ifelse(nlpar == "Lapse", 1 - par, par),
+    # cannot compute CIs as inverting the information matrix fails
+    CI_2.5 = par,
+    CI_97.5 = par,
+    package = "mirt"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+```
+
+```{r, fig.height=8}
+item_pars_4pl %>%
+  bind_rows(mirt_item_pars_4pl) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  scale_x_continuous(breaks = 1:12) +
+	facet_wrap("nlpar", scales = "free_x") +
+	geom_pointrange() +
+  scale_color_manual(name = "Package", values = c("black", "grey")) +
+	coord_flip() +
+	labs(x = "Item Number")
+```
+
+### Comparison of models
+
+#### Out-Of-Sample Predictive Performance
+
+```{r}
+loo_compare(fit_1pl, fit_2pl, fit_3pl_fixed, fit_3pl, fit_4pl)
+```
+
+#### Person Parameters
+
+```{r}
+person_pars_all <- bind_rows(
+  "1PL: brms" = person_pars_1pl,
+  "1PL: mirt" = mirt_person_pars_1pl, 
+  "2PL: brms" = person_pars_2pl, 
+  "2PL: mirt" = mirt_person_pars_2pl, 
+  "3PL(f): brms" = person_pars_3pl_fixed,
+  "3PL(f): mirt" = mirt_person_pars_3pl_fixed,
+  "3PL: brms" = person_pars_3pl,
+  "3PL: mirt" = mirt_person_pars_3pl,
+  "4PL: brms" = person_pars_4pl, 
+  "4PL: mirt" = mirt_person_pars_4pl, 
+  .id = "model"
+) %>%
+  mutate(model = factor(model, levels = unique(model)))
+```
+
+```{r, fig.height=12, fig.width=12}
+person_pars_all %>%
+  select(Estimate, model, id) %>% 
+  spread(model, Estimate) %>%
+  select(-id) %>%
+  GGally::ggpairs(aes(alpha = 0.4))
+```
+
+```{r, fig.height=12, fig.width=12}
+person_pars_all %>%
+  select(Est.Error, model, id) %>% 
+  spread(model, Est.Error) %>%
+  select(-id) %>%
+  GGally::ggpairs(aes(alpha = 0.4))
+```
+
+### 4PL models in Conditional Formulation {.tabset}
+
+#### Model Fitting
+
+```{r}
+formula_4pl_cond <- bf(
+  response2 ~ sigma * zeta + (1 - sigma) * inv_logit(beta + exp(logalpha) * theta),
+  theta ~ 0 + (1 | id),
+  beta ~ 1 + (1 |i| item),
+  logalpha ~ 1 + (1 |i| item),
+  logitsigma ~ 1 + (1 |i| item),
+  nlf(sigma ~ inv_logit(logitsigma)),
+  logitzeta ~ 1 + (1 |i| item),
+  nlf(zeta ~ inv_logit(logitzeta)),
+  nl = TRUE
+)
+
+prior_4pl_cond <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(-2, 0.5)", class = "b", nlpar = "logitsigma") +
+  prior("normal(-2, 0.5)", class = "b", nlpar = "logitzeta") +
+  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitsigma") +
+  prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitzeta")
+
+fit_4pl_cond <- brm(
+  formula = formula_4pl_cond,
+  data = spm_long,
+  family = brmsfamily("bernoulli", "identity"),
+  prior = prior_4pl_cond,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_4pl_cond"
+)
+
+fit_4pl_cond <- add_loo(fit_4pl_cond)
+```
+
+```{r}
+summary(fit_4pl_cond)
+```
+
+#### Person Parameters
+
+```{r}
+# extract and scale person parameters
+person_pars_4pl_cond <- 
+  ranef(fit_4pl_cond, summary = FALSE)$id[, , "theta_Intercept"]
+
+person_sds_4pl_cond <- apply(person_pars_4pl_cond, 1, sd)
+
+person_pars_4pl_cond <- person_pars_4pl_cond %>%
+  sweep(1, person_sds_4pl_cond, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "id") %>%
+  mutate(id = as.numeric(id))
+
+# plot person parameters
+person_pars_4pl_cond %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+#### Item Parameters
+
+```{r, fig.height=8}
+# extract item parameters
+item_pars_4pl_cond <- coef(fit_4pl_cond, summary = FALSE)$item
+
+# locations
+beta <- item_pars_4pl_cond[, , "beta_Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+alpha <- item_pars_4pl_cond[, , "logalpha_Intercept"] %>%
+	exp() %>%
+  sweep(1, person_sds_4pl_cond, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# false answers probability
+sigma <- item_pars_4pl_cond[, , "logitsigma_Intercept"] %>%
+	inv_logit_scaled()
+
+# conditional guessing probability
+zeta <- item_pars_4pl_cond[, , "logitzeta_Intercept"] %>%
+	inv_logit_scaled()
+
+# guessing parameters
+gamma <- (sigma * zeta) %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# lapse parameters
+psi <- (sigma * (1 - zeta)) %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# plot locations and slope next to each other
+bind_rows(beta, alpha, gamma, psi, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(item = as.numeric(item)) %>%
+	mutate(nlpar = factor(
+	  nlpar, labels = c("Location", "Slope", "Guessing", "Lapse")
+	)) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  scale_x_continuous(breaks = 1:12) +
+	facet_wrap("nlpar", scales = "free_x") +
+	geom_pointrange() +
+	coord_flip() +
+	labs(x = "Item Number")
+```

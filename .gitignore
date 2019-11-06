@@ -34,3 +34,12 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# additional paper files
+SPM_IRT_paper.pdf
+SPM_IRT_paper.tex
+SPM_IRT_paper.log
+
+# additional analysis files
+SPM_IRT_analysis.R
+SPM_IRT_analysis.sh

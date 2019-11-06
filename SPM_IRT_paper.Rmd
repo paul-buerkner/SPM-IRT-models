@@ -1,0 +1,242 @@
+---
+title: "Analysing Standard Progressive Matrics (SPM-LS) with Bayesian Item Response Models"
+shorttitle: "Bayesian Item Response Models"
+author: 
+  - name: Paul-Christian Bürkner
+    affiliation: "1"
+    corresponding: yes
+    email: paul.buerkner@gmail.com
+    address: Department of Computer Science, Aalto University, Konemiehentie 2, 02150 Espoo, Finland
+  - name: Marie Beisemann
+    affiliation: "2"
+    email: marie.beisemann@web.de
+    address: Department of Statistics, University of Dortmund, August-Schmidt-Straße 4, 44227 Dortmund, Germany
+affiliation:
+  - id: 1
+    institution: Department of Computer Science, Aalto University, Finland
+  - id: 2
+    institution: Department of Statistics, University of Dortmund, Germany
+abstract: |
+  Abstract 
+keywords: Standard Progressive Matrics, Item Response Theory, Bayesian Statistics, brms, Stan, R
+lang: english
+class: doc
+lineno: yes
+figsintext: true
+# numbersections: false
+encoding: UTF-8
+bibliography:
+  - SPM_IRT_paper.bib
+output:
+  papaja::apa6_pdf:
+    highlight: default
+header-includes:
+   - \usepackage{mathtools}
+   - \usepackage[utf8]{inputenc}
+   - \usepackage[T1]{fontenc}
+   - \usepackage{textcomp}
+   - \usepackage{graphicx,pdflscape}
+   - \usepackage{geometry}
+   - \usepackage{amsmath}
+   - \usepackage{float}
+   - \usepackage{supertabular}
+   - \usepackage{booktabs,caption,fixltx2e}
+   - \usepackage[flushleft]{threeparttable}
+   - \usepackage{natbib}
+   - \usepackage{tcolorbox}
+   - \usepackage{paralist}
+   - \usepackage{multicol}
+   - \newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, message = FALSE, warning = FALSE, results = "hide", cache = FALSE}
+library(knitr)
+library(kableExtra)
+library(papaja)
+library(tidyverse)
+library(brms)
+
+# set ggplot theme
+theme_set(bayesplot::theme_default())
+
+# set rstan options
+rstan::rstan_options(auto_write = TRUE)
+options(mc.cores = max(1, parallel::detectCores() - 1))
+
+# enables / disables caching for all chunks of code
+knitr::opts_chunk$set(
+  cache = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE
+)
+options(knitr.kable.NA = '')
+
+# how to use papaja ? https://crsh.github.io/papaja_man/introduction.html
+```
+
+# Introduction
+
+Raven’s Standard Progressive Matrices (SPM) test [@raven1941] and related
+matrix-based tests are widely applied measures of cognitive ability [e.g.,
+@jensen1988; @pind2003]. Due to their non-verbal content, which reduces biases
+due to language and cultural differenes, they are considered one of the purest
+measures of fluid intelligence [@myszkowski2018]. However, a disadvantage of the
+original SPM is that its administration takes considerable time as 60 items have
+to be answered and time limits are either very loose or not imposed at all
+[e.g., @pind2003]. Thus, using it as part of a bigger procedure involving the
+administration of multiple tests and/or experiments may be problematic. This is
+not only due to direct time restrictions but also because participants'
+motivation and concentration tends to decline over the course of the complete
+procedure potentially leading to less valid measurements [e.g., @ackerman2009].
+
+Recently, @myszkowski2018 have proposed a short version of the original SPM
+test, called SPM-LS, comprising only the last block of 12 most complex SPM items
+and evaluated its statistical properties using methods of Item Response Theory
+(IRT). IRT is widely applied in the human sciences to model persons’ responses
+on a set of items measuring one or more latent constructs [for a comprehensive
+introduction see @lord2012; @embretson2013;
+@vanderlinden2013]. Due to its flexibility compared to Classical Test Theory
+(CTT), IRT provides the formal statistical basis for most modern psychological
+measurement. The best known IRT models are likely those for binary responses,
+which predict the probability of a correct answer depending on the item's
+difficulty and potentially other item properties as well as the participant's
+latent abilities. As responses on SPM items can be categorized as either right
+or wrong, we will focus on these binary models in the present paper [although
+other models for this data are possible as well; see @myszkowski2018].
+@myszkowski2018, whose data we seeks to reanalyse, used frequenstist IRT models
+for inference. In this paper, we will apply Bayesian IRT models instead and
+investigate potential differences to the original results. In doing so, we hope
+to improve our unstanding of the robustness of the inference obtainable from the
+SPM-LS test.
+
+In Bayesian statistics applied to IRT, we aim to estimate the posterior
+distribution $p(\theta, \xi | y)$ of the person and item parameters ($\theta$
+and $\xi$, respectively) given the data $y$. We may be either interested in the
+posterior distribution directly, or in quantities that can be computed on its
+basis. The posterior distribution for an IRT model is defined as
+
+$$
+p(\theta, \xi | y) = \frac{p(y | \theta, \xi) \, p(\theta, \xi)}{p(y)}.
+$$
+
+In the above equation $p(y | \theta, \xi)$ is the likelihood, $p(\theta, \xi)$
+is the prior distribution and $p(y)$ is the marginal likelihood. The likelihood
+$p(y | \theta, \xi)$ is the distribution of the data given the parameters and
+thus relates the the data to the parameters. The prior distribution $p(\theta,
+\xi)$ describes the uncertainty in the person and item parameters before having
+seen the data. It thus allows to explicitely incorporate prior knowledge into
+the model. In practice, we will factorize the joint prior $p(\theta, \xi)$ into
+the product of $p(\theta)$ and $p(\xi)$ so that we can specify priors on person
+and items parameters independently. We will detail likelihoods and priors for
+Bayesian IRT models in the next section. The marginal likelihood $p(y)$ serves
+as a normalizing constant so that the posterior is an actual probability
+distribution. Except in the context of specific methods (i.e., Bayes factors),
+$p(y)$ is rarely of direct interest.
+
+In frequentist statistics, parameter estimates are usually obtained by finding
+those parameter values that maximise the likelihood. In contrast, Bayesian
+statistics estimate the full (joint) posterior distribution of the parameters.
+This is not only fully consistent with probability theory, but also much more
+informative than a single point estimate (and an approximate measure of
+uncertainty commonly known as 'standard error'). 
+
+Obtaining the posterior distribution analytically is only possible in certain
+cases of carefully chosen combinations of prior and likelihood, which may
+considerably limit modelling flexibilty but yield a computational advantage.
+However, with the increased power of today's computers, Markov-Chain Monte-Carlo
+(MCMC) sampling methods constitute a powerful and feasible alternative to
+obtaining posterior distributions for complex models in which the majority of
+modeling decisions is made based on theoretical and not computational grounds.
+Despite all the computing power, these sampling algorithms are computationally
+very intensive and thus fitting models using full Bayesian inference is usually
+much slower than in point estimation techniques. However, advantages of Bayesian
+inference -- such as greater modeling flexibility, prior distributions, and more
+informative results -- are often worth the increased computational cost
+[@gelman2013]. Whether Bayesian statistics offers relevant advantages for
+the IRT modelling of the SPM-LS data will be investigated in this paper.
+
+# Bayesian IRT Models
+
+TODO: Marie
+
+# Analysis of the SPM-LS Data
+
+The analysed data consists of
+responses from 499 participants on the 12 most difficult SPM items. The data
+gathering procedure is described in detail in @myszkowski2018. The data
+themselves are freely available online (https://data.mendeley.com/datasets/h3yhs5gy3w/1). Our own fully 
+reproducible analysis of presented below is available on GitHub () 
+
+# Discussion
+
+In the present paper, we have reanalysed data to validate a short version of the
+Standard Progressive Matrices [SPM-LS; @myszkowski2018] using Bayesian IRT
+models via brms [@brms1; @brms2] and Stan [@carpenter2017]. By comparing
+out-of-sample predictive performance, we found evidence that the 3PL model with
+estimated guessing parameters outperformed simpler models and performed
+similarly well than the 4PL model, which additionally estimated lapse parameters.
+As specifying and fitting the 4PL model is substantially more involved than the
+3PL model without apparent gains in out-of-sample predictive performance, we
+argue that the 3PL model should probably be the model of choice within the scope
+of all models considered here. That is, we come to a similar conclusion as
+@myszkowski2018 in their original analysis despite using different frameworks
+for model specification and estimation (Bayesian vs. frequentist) as well as
+predictive performance [approximate leave-one-out cross-validation;
+@vehtari2017loo vs. corrected AIC and $\chi^2$-based measures; @maydeu2013].
+
+With regard to item parameters, Bayesian and frequentist estimates showed
+several important differences for the most complex 3PL and 4PL IRT models.
+First, point estimates of items with paritcularily high difficulty or slope
+(i.e., items 11 and 12) were more extreme in the frequentist estimation. One
+central reason is likely the use weakly informative priors in the Bayesian
+models which effectively shrunk extremes a little towards the mean thus
+providing more conservative and robust estimates [@gelman2013]. Specifically for
+the 4PL model it is likely that the model structure was also too complex to
+allow for reasonable maximum likelihood estimates in the absense of any
+additional information source to stabilize inference. The latter point also
+becomes apparent in the fact that the mirt package was unable to compute
+standard errors of items parameters in the 4PL model due to singularity of the
+information matrix. Even when computable, uncertainty estimates provided by the
+frequentist IRT models were not always meaningful. For instance, in the 3PL
+model, the confidence intervals of guessing parameters estimated close zero were
+ranging the whole definition space between zero and one. We would argue that
+this bascially represents a failure in the computational procedure of the
+standard errors due the the point estimates being very close to one of the
+boundaries. As such, these extreme uncertainty estimates should not be taken
+seriously. In contrast, due to the use of weakly informative priors and more
+involved inference procedures, which require no approximations to estimate
+uncertainties, the Bayesian models provided sensible uncertainty estimates for
+all item parameters of every considered IRT model.
+
+With regard to point estimates of person parameters, we found little differences
+between all considered Bayesian and frequentist IRT models. Pairwise
+correlations between point estimates of two different models were all exceeding
+$r = 0.97$ and often even larger than $r = 0.99$.  That is, we may consider them
+as basically equivalent for all practical purposes. However, we found
+substantial differences in the uncertainty estimates of person parameters across
+models. That is, even though point estimates were highly similar across model
+classes, it is still important to choose an appropriately complex model for the
+data (i.e., the 3PL model in our case) in order to get sensible uncertainty
+estimates. The latter are not only relevant for individual diagnostic purposes
+but also when using person parameters as predictors in other models while taking
+their estiamtion uncertainty into account. In addition, uncertainty estimates of
+Bayesian and frequentist models varied substantially even within the same model
+class, in particular for 3PL and 4PL models. Without a known ground truth, we
+have no direct evidence which of the uncertainty estimates are more accurate,
+but we would tend to trust the Bayesian results more due to the application of
+weakly informative priors and overall more robust inference procedures for
+the considered class of models.
+
+In summary, we have were able to replicate several key findings of
+@myszkowski2018. Additionally, we demonstrated that Bayesian IRT models have
+some important advantages over their frequentist counterparts when it comes to
+reliably fitting more complex response processes and providing sensible
+uncertainty estimates for all model parameters and other quantities of interest.
+
+# References {-}
+
+<div id="refs"></div>
+

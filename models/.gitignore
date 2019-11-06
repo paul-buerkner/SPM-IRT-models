@@ -1,0 +1,3 @@
+# ensure that model objects are not stored on GitHub as they are too large
+*
+!.gitignore
