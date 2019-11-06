@@ -164,11 +164,12 @@ TODO: Marie
 
 # Analysis of the SPM-LS Data
 
-The analysed data consists of
-responses from 499 participants on the 12 most difficult SPM items. The data
-gathering procedure is described in detail in @myszkowski2018. The data
-themselves are freely available online (https://data.mendeley.com/datasets/h3yhs5gy3w/1). Our own fully 
-reproducible analysis of presented below is available on GitHub () 
+The analysed data consists of responses from 499 participants on the 12 most
+difficult SPM items. The data gathering procedure is described in detail in
+@myszkowski2018. The data themselves are freely available online
+(https://data.mendeley.com/datasets/h3yhs5gy3w/1). Our own fully reproducible
+analysis presented below is available on GitHub
+(https://github.com/paul-buerkner/SPM-IRT-models).
 
 # Discussion
 
