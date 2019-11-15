@@ -136,6 +136,7 @@ spm_wide <- spm_long %>%
 
 ```{r}
 prior_1pl <- 
+  prior("normal(0, 2)", class = "Intercept")
   prior("normal(0, 3)", class = "sd", group = "id") + 
   prior("normal(0, 3)", class = "sd", group = "item")
 

@@ -7,15 +7,9 @@ author:
     corresponding: yes
     email: paul.buerkner@gmail.com
     address: Department of Computer Science, Aalto University, Konemiehentie 2, 02150 Espoo, Finland
-  - name: Marie Beisemann
-    affiliation: "2"
-    email: marie.beisemann@web.de
-    address: Department of Statistics, University of Dortmund, August-Schmidt-Straße 4, 44227 Dortmund, Germany
 affiliation:
   - id: 1
     institution: Department of Computer Science, Aalto University, Finland
-  - id: 2
-    institution: Department of Statistics, University of Dortmund, Germany
 abstract: |
   Abstract 
 keywords: Standard Progressive Matrics, Item Response Theory, Bayesian Statistics, brms, Stan, R
@@ -117,11 +111,9 @@ distribution $p(\theta, \xi | y)$ of the person and item parameters ($\theta$
 and $\xi$, respectively) given the data $y$. We may be either interested in the
 posterior distribution directly, or in quantities that can be computed on its
 basis. The posterior distribution for an IRT model is defined as
-
-$$
+\begin{equation}
 p(\theta, \xi | y) = \frac{p(y | \theta, \xi) \, p(\theta, \xi)}{p(y)}.
-$$
-
+\end{equation}
 In the above equation $p(y | \theta, \xi)$ is the likelihood, $p(\theta, \xi)$
 is the prior distribution and $p(y)$ is the marginal likelihood. The likelihood
 $p(y | \theta, \xi)$ is the distribution of the data given the parameters and
@@ -160,16 +152,256 @@ the IRT modelling of the SPM-LS data will be investigated in this paper.
 
 # Bayesian IRT Models
 
-TODO: Marie
+In this section, we will introduce the a set of Bayesian IRT models for binary
+data and unidimensional person traits. Suppose that for each Person $j$ ($j = 1,
+\ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed binary response
+$y_{ji}$ which is coded as $1$ for a correct answer and $0$ otherwise.
+
+## Model Likelihood
+
+With our binary IRT models, we aim to model $p_{ji} = P(y_{ji} = 1)$, that is,
+the probability the person $j$ answers item $i$ correctly. In other words, we
+assume a Bernoulli distribution for the responses $y_{ji}$ with success
+probability $p_{ji}$:
+\begin{equation}
+\label{bernoulli}
+y_{ji} \sim \text{Bernoulli}(p_{ji})
+\end{equation}
+Across all models considered here, we will assume that all items measure a
+single latent person trait $\theta_j$. For the present data, we can expect
+$\theta_j$ to represent something closely related to fluit intelligence
+[@myszkowski2018]. The most complex model we will consider in this paper is the
+4-parameter logistic (4PL) model and all other simpler models result from this
+model by fixing some item parameters to certain values. In the 4PL model, we
+express $P(y_{ji} = 1)$ via the equation
+\begin{equation}
+\label{4pl}
+P(y_{ji} = 1) = \gamma_i + (1 - \gamma_i - \delta_i) 
+  \frac{1}{1 + \exp(-(\beta_i + \alpha_i \theta_j))}
+\end{equation}
+In the 4PL model, each item has 4 associated item parameters. The $\beta_i$
+parameter describes the location of the item, that is, how easy or difficult it
+is in general. In the above formulation of the model, higher values of $\beta_i$
+imply higher success proabilities and hence $\beta_i$ can also be called the
+'easiness' parameter. The $\alpha_i$ parameter describes how strongly item $i$
+is related to the latent person trait $\theta_j$. We can call $\alpha_i$ 'factor
+loading', 'slope', or 'discrimination' parameter, but care must be taken that
+none of these terms is used uniquely and their exact meaning can only be
+inferred in the context of a specific model [e.g., see @brms3 for a
+somewhat different use of the term 'discrimination' in IRT models]. For our
+purposes, we assume $\alpha_i$ to be positive as we expect answering the items
+correctly implies higher trait scores than when answering incorrectly. The
+$\gamma_i$ parameter describes the guessing proability, that is, the probability
+of any person to answer item $i$ correctly even if they do not know the right
+answer and thus have to guess. For obvious reasons, guessing is only relevant if
+the answer space is reasonably small. In the present data, participants saw a
+set of $8$ possible answers of which exactly one was considered correct. Thus,
+guessing cannot be ruled out and would be equal to $\gamma_i = 1/8$ for each
+item if guessing happend uniformly across all alternatives. Lastly, the
+$\delta_i$ parameter describes that participants may make mistakes even if the
+know the correct answer, perhaps because of inattention or simply misclicking
+when selecting the chosen answer. We may call $\delta_i$ the 'lapse',
+'inattention', or 'slipping' parameter. Usually these terms can be used
+interchangably but, as always, the exact meaning can only be inferred in the
+context of the specific model. As the answer format in the present data (i.e.,
+'click on the right answer') is rather simple and participants have unlimited
+time for each item, mistakes due to lapses are unlikely to appear. However, by
+including a lapse parameter into our model, we are able to explictely check
+whether lapses played a substantial role in the data.
+
+With the most complex model fully described we can simplify it in several steps
+to yield the other less complex models. The 3PL model results from the 4PL model
+by fixing the lapse probabilitiy to be zero, that is, $\delta_i = 0$ for all
+items. In the next step, we can obtain the 2PL model from the 3PL model by also
+fixing the guessing proabilities to zero, that is, $\gamma_i = 0$ for all items.
+In the last simplification step, we obtain the 1PL model [also known as Rasch
+model; @rasch1961] from the 2PL model by assuming the factor loadings to be one,
+that is, $\alpha_i = 1$ for all items. The way I described the model classes
+above is top down in the way that I started with the most complex model.
+However, this is not how I would recommend doing the actual model building for a
+given data set, which I argue should be bottom-up, that is, starting from the
+most simple (but still sensible) model. The reason is that more complex models
+tend to be more complicated to fit in the sense that they both take longer
+(especially when using fully Bayesian estimation; see below) and yield more
+convergence problems [e.g., @gelman2013; @brms3]. If we started by
+fitting the most complex model and, after considerable waiting time, found the
+model to not having converged, we may have no idea which of the several model
+components were causing the problem(s). In contrast, by starting simple and
+gradually building our way upwards to more complex models, we can make sure that
+each model component is reasonbly specified and can be reliabily estimated
+before we move further. As a result, when a problem occurs, we are likely to
+have much clearer understanding of why/where the problem occured.
+
+With the model likelihood fully specified by equations (\ref{bernoulli}) and 
+(\ref{4pl}) (potentially with some fixed item parameters), we
+are, in theory, already able to obtain estimates of person and item
+parameters via maximum likelihood (ML) estimation. There a multiple things
+that can get into our way. First, we may have simply not enough data to obtain
+sensible parameter estimates. As a rule of thumb, the more complex a model
+the more data we need to obtain a the same estimation precision. Second,
+there may be components in the model which will not be identified no matter
+how much data we add. An example binary IRT models from 2PL upwards as
+(without additional structure) cannot identify the scale of both the $\theta_j$
+and $\alpha_i$ at the same time. This is because, due to the multiplictive
+relationship, multiplying one of the two by a constant can be adjusted for
+by dividing the other by the same constant without changing the likelihood.
+Third, we need to have software that is able to do the model fitting for us,
+unless we want to hand code every estimation algorithm on our own. Using existing
+software reuires to (re-)express our models in a way the software understands.
+We will focus on the last issue first and then adress the former two. 
+
+## IRT Models as Regression Models
+
+There are a lot of IRT specific software packages available, in particular in
+the programming language R, for example, mirt [@mirt] or TAM [@TAM]; see
+@brms3 for a detailed comparison. However, in this paper, we will use
+the brms package [@brms1; @brms2], which is not focussed on IRT models but more
+generally on (Bayesian) regression models. Accordingly, we need to rewrite our
+models in a form that is understandable for brms or other packages focussed on
+regression models.
+
+The first implication of this change of frameworks is that we now think of the
+data in long format, with all responses from all participants on all items in
+the same data column coupled with additional columns for person and item
+indicators. That is, $y_{ji}$ is now formally written as $y_n$ where $n$ is the
+observation number ranging from $1$ to $N = JI$. If we needed to be more explit
+we could also use $y_{j_n i_n}$ to indicate that each observation number $n$ has
+specific indicators $j$ and $i$ associated with it. The same goes for item and
+person parameters. For example, we may write $\theta_{n_j}$ to refer to the
+ability parameter of the person $j$ to whom the $n$th observation belongs.
+
+One key aspect of regression models is that we try to express parameters on an
+unconstrained space that spans the whole real line. This allows to use linear
+(or more generally additive) predictor terms without having to worry about
+whether these predictor terms fulfill certain boundaries, for instance, are
+positive or within the unit interval $[0, 1]$. In the considered binary IRT
+models, we need to ensure that the factor loadings $\alpha$ are positive and
+that guessing and lapse parameters, $\gamma$ and $\delta$ respectively, are
+within $[0, 1]$ as otherwise the interpreation of the latter two as
+probabilities would not be sensible. In order to enforce these parameter
+boundaries within a regression, we apply (inverse-)link functions. That is, for
+$\alpha$ we use the log-link function (or equivalently the exponential response
+function) so that
+\begin{equation}
+\alpha = \exp(\eta_{\alpha})
+\end{equation}
+where $\eta_{\alpha_n}$ is uncontrained. Similarily, for $\gamma$ and $\delta$,
+we use the logit-link (or equivalently the logistic response function) so that
+\begin{align}
+\gamma &= \text{logistic}(\eta_{\gamma}) 
+  = \frac{1}{1 + \exp(-\eta_{\gamma})}, \\
+\delta &= \text{logistic}(\eta_{\delta})
+  = \frac{1}{1 + \exp(-\eta_{\delta})}
+\end{align}
+where $\eta_{\gamma}$ and $\eta_{\delta}$ are uncontrained. The location
+parameters $\beta$ are already unbounded and as such do not need an additional
+link function so that simply $\beta = eta_\beta$. The same goes for the ability
+parameters $\theta$. On the scale of the linear predictors, we can perform the
+usual regression operations, perhaps most importantly modeling predictor
+variables or including multilevel structure. In the present data, we do not have
+any additional person or item variables available so there will be no such
+predictors in our models [instead, see @brms3 for examples]. However,
+there certainly is multilevel structure as we have both multiple observations
+per item and per person, which we seek to model appropriately, as detailed in
+the next section.
+
+## Model Priors and Identification
+
+For all item parameters, we apply the non-centered parameterization of
+hierarchial models [@gelman2013] as detailed in the following. We split 
+the linear predictor $\eta$ (for any of the item
+parameters) into an overall parameter, $\overline{b}$, and an item-specific
+deviation from the overall parameter, $\tilde{b}_{i}$, so that
+<!---->
+\begin{equation} 
+\label{ncp}
+\eta_{n} = \overline{b} + \tilde{b}_{i_n} 
+\end{equation} 
+
+Without additional constraints, this split is not identified as
+adding a constant to the overall parameter can be compensated by substracting
+the same constant from all $\tilde{b}_{i}$ without changing the likelihood. In
+Bayesian multilevel models, we approach this problem by specifying an
+hierarchial prior on $\tilde{b}_{i}$ via
+<!---->
+\begin{equation} 
+\label{bprior1}
+\tilde{b}_{i} \sim \text{normal}(0, \sigma)
+\end{equation}
+<!---->
+where $\sigma$ is the standard deviation parameter over items on the
+unconstrained scale.
+Importantly, not only $\tilde{b}_{i}$ but also
+the hyperparameters $\overline{b}$ and $\sigma$ are estimated model parameters.
+Using the prior distribution from (\ref{bprior1}), we would assume the
+item parameters of the same item to be unrelated but in practice
+it is very well plausible that there is actual correlation between them [@brms3].
+To account for such (linear) dependency, we can extend (\ref{bprior1}) to the
+multivariate case, so that we can model the vector $\tilde{\bm{b}}_i =
+(\tilde{b}_{\beta_i}, \tilde{b}_{\alpha_i}, \tilde{b}_{\gamma_i},
+\tilde{b}_{\delta_i})$ jointly via a multivariate normal distribution:
+<!---->
+\begin{equation} 
+\label{bprior2}
+\tilde{\bm{b}}_i \sim \text{multinormal}(0, \bm{\sigma}, \Omega)
+\end{equation}
+<!---->
+where $\bm{\sigma} = (\sigma_{\beta}, \sigma_{\alpha}, \sigma_{\gamma}, \sigma_{\delta})$ 
+is the vector of standard deviations and $\Omega$ is the correlation matrix
+between of the item parameters [see also @brms1; @brms3; @nalborczyk2019].
+To complete the prior specification for the item parameters, we need to 
+set priors on $\overline{b}$ and $\sigma$. For this purpose, weakly-informative
+normal prior on $\overline{b}$ and half-normal priors on $\sigma$ will usually
+do just fine but other options are possible as well [see @brms3 for details].
+By weakly-informative I mean penalizing a-priori implausible values (e.g.,
+a location parameter of 1000 on the logit-scale) without affecting the
+a-priori plausible parameter space too much (e.g., location parameters within
+the interval $[-3, 3]$ on the logit-scale). In general, priors can only
+be understood in the context of the model as a whole which renders general
+recommendation for prior specification difficult [@gelman2017].
+For more details on priors for Bayesian IRT models see @brms3.
+
+With respect to the person parameters, we specify a hierarchial prior
+distribution of the same form as in (\ref{bprior1}):
+<!---->
+\begin{equation}
+\theta_j \sim \text{normal}(0, \sigma_\theta)
+\end{equation}
+<!---->
+where, similar as above, $\sigma_\theta$ is a standard deviation parameter
+estimated as part of the model on which we put a weakly-informative 
+prior. In 2PL or more complex models, we can also fix $\sigma_\theta$ to 
+some value (usually $1$) as the scale is completely accounted for by
+the scale of the factor loadings. However, when using weakly-informative priors
+on both $\theta$ and $\alpha$ as well as on their hyperparameters, estimating
+$\sigma_\theta$ actually poses no problem for model estimation.
+Importantly, however, we do not include an overall person parameter
+$\overline{\theta}$ as done for item parameters in (\ref{ncp}) as this would
+conflict with the overall location parameter $\overline{b}_\beta$
+leading to substantial convergence problems in the absense very informative
+priors.
+
+<!--
+The distributions in (\ref{bprior1}) and (\ref{bprior2}) also provides the basis
+for frequentist multilevel models in which it is called 'random effects
+distribution' instead of a 'prior distribution'. Despite the use of different
+language to describe the model assumptions, the underlying rational is quite
+similar [e.g., see @gelmanMLM2006; @nalborczyk2019].
+-->
+
 
 # Analysis of the SPM-LS Data
 
-The analysed data consists of responses from 499 participants on the 12 most
-difficult SPM items. The data gathering procedure is described in detail in
-@myszkowski2018. The data themselves are freely available online
-(https://data.mendeley.com/datasets/h3yhs5gy3w/1). Our own fully reproducible
-analysis presented below is available on GitHub
+In the following, we will apply the Bayesian IRT models presented above to the
+SPM data of @myszkowski2018. The analysed data consists of responses from 499
+participants on the 12 most difficult SPM items. The data gathering procedure is
+described in detail in @myszkowski2018. The data themselves are freely available
+online (https://data.mendeley.com/datasets/h3yhs5gy3w/1). Below we present the
+code of the models as specified in brms and some central results. Our fully
+reproducible analysis is available on GitHub
 (https://github.com/paul-buerkner/SPM-IRT-models).
+
+
 
 # Discussion
 
@@ -196,8 +428,8 @@ central reason is likely the use weakly informative priors in the Bayesian
 models which effectively shrunk extremes a little towards the mean thus
 providing more conservative and robust estimates [@gelman2013]. Specifically for
 the 4PL model it is likely that the model structure was also too complex to
-allow for reasonable maximum likelihood estimates in the absense of any
-additional information source to stabilize inference. The latter point also
+allow for reasonable maximum likelihood estimation in the absense of any
+additional regularization to stabilize inference. The latter point also
 becomes apparent in the fact that the mirt package was unable to compute
 standard errors of items parameters in the 4PL model due to singularity of the
 information matrix. Even when computable, uncertainty estimates provided by the
@@ -223,7 +455,7 @@ classes, it is still important to choose an appropriately complex model for the
 data (i.e., the 3PL model in our case) in order to get sensible uncertainty
 estimates. The latter are not only relevant for individual diagnostic purposes
 but also when using person parameters as predictors in other models while taking
-their estiamtion uncertainty into account. In addition, uncertainty estimates of
+their estimation uncertainty into account. In addition, uncertainty estimates of
 Bayesian and frequentist models varied substantially even within the same model
 class, in particular for 3PL and 4PL models. Without a known ground truth, we
 have no direct evidence which of the uncertainty estimates are more accurate,

@@ -39,6 +39,8 @@ vignettes/*.pdf
 SPM_IRT_paper.pdf
 SPM_IRT_paper.tex
 SPM_IRT_paper.log
+SPM_IRT_paper.aux
+SPM_IRT_paper.out
 
 # additional analysis files
 SPM_IRT_analysis.R
