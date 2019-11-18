@@ -11,7 +11,17 @@ affiliation:
   - id: 1
     institution: Department of Computer Science, Aalto University, Finland
 abstract: |
-  Abstract 
+  Raven’s Standard Progressive Matrices (SPM) test and related matrix-based
+  tests are widely applied measures of cognitive ability. Using Bayesian Item
+  Response Theory (IRT) models, I reanalyse data of an SPM short form proposed
+  by Myszkowski & Storme (2018). My results indicate that a 3-parameter logistic
+  (3PL) model is sufficient to describe participants dichotomous responses
+  (correct vs. incorrect) while persons' ability parameters are quite robust
+  across IRT models of different complexity. These conclusions are in line with
+  the original results of Myszkowski & Storme (2018). Using Bayesian as opposed
+  to frequentist IRT models offered advantages in the estimation of more complex
+  (i.e., 3-4PL) IRT models and provided more sensible and robust uncertainty
+  estimates.
 keywords: Standard Progressive Matrics, Item Response Theory, Bayesian Statistics, brms, Stan, R
 lang: english
 class: doc
