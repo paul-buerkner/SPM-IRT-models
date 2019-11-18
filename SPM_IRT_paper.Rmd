@@ -14,10 +14,10 @@ abstract: |
   Raven’s Standard Progressive Matrices (SPM) test and related matrix-based
   tests are widely applied measures of cognitive ability. Using Bayesian Item
   Response Theory (IRT) models, I reanalyse data of an SPM short form proposed
-  by Myszkowski & Storme (2018). My results indicate that a 3-parameter logistic
+  by Myszkowski & Storme (2018). Results indicate that a 3-parameter logistic
   (3PL) model is sufficient to describe participants dichotomous responses
   (correct vs. incorrect) while persons' ability parameters are quite robust
-  across IRT models of different complexity. These conclusions are in line with
+  across IRT models of varying complexity. These conclusions are in line with
   the original results of Myszkowski & Storme (2018). Using Bayesian as opposed
   to frequentist IRT models offered advantages in the estimation of more complex
   (i.e., 3-4PL) IRT models and provided more sensible and robust uncertainty
@@ -112,9 +112,9 @@ difficulty and potentially other item properties as well as the participant's
 latent abilities. As responses on SPM items can be categorized as either right
 or wrong, we will focus on these binary models in the present paper [although
 other models for this data are possible as well; see @myszkowski2018].
-@myszkowski2018, whose data we seeks to reanalyse, used frequenstist IRT models
-for inference. In this paper, we will apply Bayesian IRT models instead and
-investigate potential differences to the original results. In doing so, we hope
+@myszkowski2018, whose data I seek to reanalyse, used frequenstist IRT models
+for inference. In this paper, I will apply Bayesian IRT models instead and
+investigate potential differences to the original results. In doing so, I hope
 to improve our unstanding of the robustness of the inference obtainable from the
 SPM-LS test.
 
@@ -164,9 +164,9 @@ the IRT modelling of the SPM-LS data will be investigated in this paper.
 
 # Bayesian IRT Models
 
-In this section, we will introduce the a set of Bayesian IRT models for binary
-data and unidimensional person traits. Suppose that for each Person $j$ ($j = 1,
-\ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed binary response
+In this section, I will introduce a set of Bayesian IRT models for binary
+data and unidimensional person traits. Suppose that for each pserson $j$ ($j = 1,
+\ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed a binary response
 $y_{ji}$ which is coded as $1$ for a correct answer and $0$ otherwise.
 
 ## Model Likelihood
@@ -194,7 +194,7 @@ P(y_{ji} = 1) = \gamma_i + (1 - \gamma_i - \psi_i)
 In the 4PL model, each item has 4 associated item parameters. The $\beta_i$
 parameter describes the location of the item, that is, how easy or difficult it
 is in general. In the above formulation of the model, higher values of $\beta_i$
-imply higher success proabilities and hence $\beta_i$ can also be called the
+imply higher success probabilities and hence $\beta_i$ can also be called the
 'easiness' parameter. The $\alpha_i$ parameter describes how strongly item $i$
 is related to the latent person trait $\theta_j$. We can call $\alpha_i$ 'factor
 loading', 'slope', or 'discrimination' parameter, but care must be taken that
@@ -221,9 +221,9 @@ time for each item, mistakes due to lapses are unlikely to appear. However, by
 including a lapse parameter into our model, we are able to explictely check
 whether lapses played a substantial role in the data.
 
-With the most complex model fully described we can simplify it in several steps
+We can now simplify the 4PL model in several steps
 to yield the other less complex models. The 3PL model results from the 4PL model
-by fixing the lapse probabilitiy to be zero, that is, $\psi_i = 0$ for all
+by fixing the lapse probabilitiy to zero, that is, $\psi_i = 0$ for all
 items. In the next step, we can obtain the 2PL model from the 3PL model by also
 fixing the guessing proabilities to zero, that is, $\gamma_i = 0$ for all items.
 In the last simplification step, we obtain the 1PL model [also known as Rasch
@@ -234,7 +234,7 @@ However, this is not how I would recommend doing the actual model building for a
 given data set, which I argue should be bottom-up, that is, starting from the
 most simple (but still sensible) model. The reason is that more complex models
 tend to be more complicated to fit in the sense that they both take longer
-(especially when using fully Bayesian estimation; see below) and yield more
+(especially when using fully Bayesian estimation) and yield more
 convergence problems [e.g., @gelman2013; @brms3]. If we started by
 fitting the most complex model and, after considerable waiting time, found the
 model to not having converged, we may have no idea which of the several model
@@ -242,35 +242,37 @@ components were causing the problem(s). In contrast, by starting simple and
 gradually building our way upwards to more complex models, we can make sure that
 each model component is reasonbly specified and can be reliabily estimated
 before we move further. As a result, when a problem occurs, we are likely to
-have much clearer understanding of why/where the problem occured.
+have much clearer understanding of why/where the it occured and how
+to fix it.
 
 With the model likelihood fully specified by equations (\ref{bernoulli}) and 
 (\ref{4pl}) (potentially with some fixed item parameters), we
 are, in theory, already able to obtain estimates of person and item
-parameters via maximum likelihood (ML) estimation. There a multiple things
-that can get into our way. First, we may have simply not enough data to obtain
+parameters via maximum likelihood (ML) estimation. Howerver, there are multiple 
+things that can get into our way at this point.
+First, we may have simply not enough data to obtain
 sensible parameter estimates. As a rule of thumb, the more complex a model
-the more data we need to obtain a the same estimation precision. Second,
+the more data we need to obtain the same estimation precision. Second,
 there may be components in the model which will not be identified no matter
-how much data we add. An example binary IRT models from 2PL upwards as
-(without additional structure) cannot identify the scale of both the $\theta_j$
+how much data we add. An example are binary IRT models from 2PL upwards as
+(without additional structure) we cannot identify the scale of both the $\theta_j$
 and $\alpha_i$ at the same time. This is because, due to the multiplictive
 relationship, multiplying one of the two by a constant can be adjusted for
 by dividing the other by the same constant without changing the likelihood.
 Third, we need to have software that is able to do the model fitting for us,
 unless we want to hand code every estimation algorithm on our own. Using existing
-software reuires to (re-)express our models in a way the software understands.
+software requires to (re-)express our models in a way the software understands.
 We will focus on the last issue first and then adress the former two. 
 
 ## IRT Models as Regression Models
 
 There are a lot of IRT specific software packages available, in particular in
-the programming language R, for example, mirt [@mirt] or TAM [@TAM]; see
-@brms3 for a detailed comparison. However, in this paper, we will use
-the brms package [@brms1; @brms2], which is not focussed on IRT models but more
-generally on (Bayesian) regression models. Accordingly, we need to rewrite our
-models in a form that is understandable for brms or other packages focussed on
-regression models.
+the programming language R, for example, mirt [@mirt] or TAM [@TAM; see
+@brms3 for a detailed comparison]. However, in this paper, we will use the brms
+package [@brms1; @brms2], which is not focussed specifically on IRT models but
+more generally on (Bayesian) regression models. Accordingly, we need to
+rewrite our IRT models in a form that is understandable for brms or other packages
+focussed on regression models.
 
 The first implication of this change of frameworks is that we now think of the
 data in long format, with all responses from all participants on all items in
@@ -307,12 +309,12 @@ we use the logit-link (or equivalently the logistic response function) so that
 \end{align}
 where $\eta_{\gamma}$ and $\eta_{\psi}$ are uncontrained. The location
 parameters $\beta$ are already unbounded and as such do not need an additional
-link function so that simply $\beta = eta_\beta$. The same goes for the ability
+link function so that simply $\beta = \eta_\beta$. The same goes for the ability
 parameters $\theta$. On the scale of the linear predictors, we can perform the
 usual regression operations, perhaps most importantly modeling predictor
 variables or including multilevel structure. In the present data, we do not have
 any additional person or item variables available so there will be no such
-predictors in our models [instead, see @brms3 for examples]. However,
+predictors in our models [see @brms3 for examples]. However,
 there certainly is multilevel structure as we have both multiple observations
 per item and per person, which we seek to model appropriately, as detailed in
 the next section.
@@ -342,11 +344,12 @@ hierarchial prior on $\tilde{b}_{i}$ via
 \end{equation}
 <!---->
 where $\sigma$ is the standard deviation parameter over items on the
-unconstrained scale.
-Importantly, not only $\tilde{b}_{i}$ but also
-the hyperparameters $\overline{b}$ and $\sigma$ are estimated model parameters.
+unconstrained scale. Importantly, not only $\tilde{b}_{i}$ but also the
+hyperparameters $\overline{b}$ and $\sigma$ are estimated during the model
+fitting.
+
 Using the prior distribution from (\ref{bprior1}), we would assume the
-item parameters of the same item to be unrelated but in practice
+item parameters of the same item to be unrelated but, in practice,
 it is very well plausible that there is actual correlation between them [@brms3].
 To account for such (linear) dependency, we can extend (\ref{bprior1}) to the
 multivariate case, so that we can model the vector $\tilde{\bm{b}}_i =
@@ -369,7 +372,7 @@ By weakly-informative I mean penalizing a-priori implausible values (e.g.,
 a location parameter of 1000 on the logit-scale) without affecting the
 a-priori plausible parameter space too much (e.g., location parameters within
 the interval $[-3, 3]$ on the logit-scale). In general, priors can only
-be understood in the context of the model as a whole which renders general
+be understood in the context of the model as a whole, which renders general
 recommendation for prior specification difficult [@gelman2017].
 For more details on priors for Bayesian IRT models see @brms3.
 
@@ -380,8 +383,8 @@ distribution of the same form as in (\ref{bprior1}):
 \theta_j \sim \text{normal}(0, \sigma_\theta)
 \end{equation}
 <!---->
-where, similar as above, $\sigma_\theta$ is a standard deviation parameter
-estimated as part of the model on which we put a weakly-informative 
+where, similar as for item parameters, $\sigma_\theta$ is a standard deviation
+parameter estimated as part of the model on which we put a weakly-informative 
 prior. In 2PL or more complex models, we can also fix $\sigma_\theta$ to 
 some value (usually $1$) as the scale is completely accounted for by
 the scale of the factor loadings. However, when using weakly-informative priors
@@ -427,26 +430,25 @@ spm_wide <- spm_long %>%
   select(-person)
 ```
 
-In the following, we will apply the Bayesian IRT models presented above to the
+In this section, the Bayesian IRT models presented above will be applied to the
 SPM data of @myszkowski2018. The analysed data consists of responses from 499
-participants on the 12 most difficult SPM items. The data gathering procedure is
-described in detail in @myszkowski2018. The data themselves are freely available
-online (https://data.mendeley.com/datasets/h3yhs5gy3w/1). Below I present the
-code of the models as specified in brms [@brms1] and fitted with Stan
-[@carpenter2017] as well as some central results. All considered models
+participants on the 12 most difficult SPM items and are freely available online
+(https://data.mendeley.com/datasets/h3yhs5gy3w/1). The data gathering procedure is
+described in detail in @myszkowski2018. Analyses were performed in R [@R]
+using brms [@brms1] and Stan [@carpenter2017] for model specification and 
+estimation. All considered models
 converged well according to sample-agnostic [@vehtari2019] and sampler-specific 
 [@betancourt2017] diagnostics. In the presentation of the results below, I omit
 details of prior distributions and auxiliary model fitting arguments. All
 details and the fully reproducible analysis are available on GitHub
-(https://github.com/paul-buerkner/SPM-IRT-models).
-See @brms1, @brms2, and @brms3 for explanation and details of the brms formula
-syntax. For the model estimation, the data needs to be represented in long
-format as discussed above. The relevant variables are binary response of the
-participants (variable `response2`) coded as either correct (`1`) or incorrect
-(`0`) as well as `person` and `item` identifiers. In addition to estimating the
-IRT models in a Bayesian way, I also estimated them in the same way as in
-original analysis, that is, with the mirt package [@mirt] using the estimation
-settings as @myszkowski2018.
+(https://github.com/paul-buerkner/SPM-IRT-models). 
+As discussed above, the data need to be represented in long format for
+estimation in a multilevel regression framework. The relevant variables are the
+binary response of the participants (variable `response2`) coded as either
+correct (`1`) or incorrect (`0`) as well as `person` and `item` identifiers. In
+addition to estimating the IRT models in a Bayesian way, I also estimated them
+in the same way as in original analysis, that is, with the mirt package [@mirt]
+using the same estimation settings as @myszkowski2018.
 
 ```{r spm-data, results="asis", eval = FALSE}
 spm_long %>%
@@ -463,7 +465,7 @@ spm_long %>%
 ## Model Estimation
 
 Following the principal of building models bottom-up, we start with the 
-estimation of the most simple sensible model, that is, the 1PL model in our case.
+estimation of the most simple sensible model, that is, the 1PL model.
 Its formula can be specified in brms as
 
 ```{r, eval = FALSE, echo=TRUE}
@@ -495,19 +497,6 @@ person_pars_1pl <- person_pars_1pl %>%
 	as_tibble() %>%
 	rownames_to_column(var = "id") %>%
   mutate(id = as.numeric(id))
-
-# plot person parameters
-# person_pars_1pl %>%
-#   arrange(Estimate) %>%
-#   mutate(id2 = seq_len(n())) %>%
-# 	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-# 	geom_pointrange(alpha = 0.7) +
-# 	coord_flip() +
-# 	labs(x = "Person Number (sorted after Estimate)") +
-#   theme(
-#     axis.text.y = element_blank(),
-#     axis.ticks.y = element_blank()
-#   )
 ```
 
 ```{r}
@@ -524,34 +513,6 @@ mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
     id = seq_len(n())
   ) %>%
   select(-scale)
-```
-
-```{r}
-# person_pars_1pl %>%
-#   bind_cols(mirt_person_pars_1pl) %>%
-# 	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(-4, 5), y = c(-4, 5)) +
-# 	labs(
-# 		x = "Mean (brms)",
-# 	  y = "Mean (mirt)",
-# 		color = "SD (brms)"
-# 	)
-
-# person_pars_1pl %>%
-#   bind_cols(mirt_person_pars_1pl) %>%
-# 	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
-# 	labs(
-# 		x = "SD (brms)",
-# 	  y = "SD (mirt)",
-# 		color = "Mean (brms)"
-# 	)
 ```
 
 ```{r}
@@ -594,10 +555,11 @@ item_pars_1pl %>%
 	labs(x = "Item Number")
 ```
 
-As displayed in Figure \ref{fig:item-pars-1pl}, brms and mirt item
-parameter estimates of the 1PL are very similar. In addition, their uncertainty
-estimates align closely as well. The brms formula for the 2PL model looks
-as follows:
+For a thorough introduction and dicsussion of the brms formula syntax
+see @brms1, @brms2, and @brms3. As displayed in Figure \ref{fig:item-pars-1pl},
+brms and mirt item parameter estimates of the 1PL are very similar. In addition,
+their uncertainty estimates align closely as well. The brms formula for the 2PL
+model looks as follows:
 
 ```{r, eval = FALSE, echo=TRUE}
 formula_2pl <- bf(
@@ -632,19 +594,6 @@ person_pars_2pl <- person_pars_2pl %>%
 	as_tibble() %>%
 	rownames_to_column(var = "id") %>%
   mutate(id = as.numeric(id))
-
-# plot person parameters
-# person_pars_2pl %>%
-#   arrange(Estimate) %>%
-#   mutate(id2 = seq_len(n())) %>%
-# 	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-# 	geom_pointrange(alpha = 0.7) +
-# 	coord_flip() +
-# 	labs(x = "Person Number (sorted after Estimate)") +
-#   theme(
-#     axis.text.y = element_blank(),
-#     axis.ticks.y = element_blank()
-#   )
 ```
 
 ```{r}
@@ -656,35 +605,6 @@ mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
     Q97.5 = Estimate + 1.96 * Est.Error,
     id = seq_len(n())
   )
-```
-
-```{r}
-# plot comparison of person parameters
-# person_pars_2pl %>%
-#   bind_cols(mirt_person_pars_2pl) %>%
-# 	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(-4, 5), y = c(-4, 5)) +
-# 	labs(
-# 		x = "Mean (brms)",
-# 	  y = "Mean (mirt)",
-# 		color = "SD (brms)"
-# 	)
-
-# person_pars_2pl %>%
-#   bind_cols(mirt_person_pars_2pl) %>%
-# 	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
-# 	labs(
-# 		x = "SD (brms)",
-# 	  y = "SD (mirt)",
-# 		color = "Mean (brms)"
-# 	)
 ```
 
 ```{r}
@@ -749,16 +669,15 @@ item_pars_2pl %>%
 	labs(x = "Item Number")
 ```
 
-When comparing the formulas for the 1PL and 2PL models, we see that
-the structure has changed considerably as a result of going from a 
-generalized linear model to a generalized non-linear model [for more
-details see @brms3].
-As displayed in Figure \ref{fig:item-pars-2pl}, brms and mirt item
-parameter point and uncertainty estimates of the 2PL are rather similar but not
-as close as for the 1PL model. In particular, we see that the brms slope estimates 
-of items 4 and 5 are less extreme than those of mirt presumably due to
-the regularization implied by the hierarchical priors.
-The brms formula for the 3PL model looks as follows:
+When comparing the formulas for the 1PL and 2PL models, we see that the
+structure has changed considerably as a result of going from a generalized
+linear model to a generalized non-linear model [see @brms3 for more details]. As
+displayed in Figure \ref{fig:item-pars-2pl}, brms and mirt item parameter point
+and uncertainty estimates of the 2PL are rather similar but not as close as for
+the 1PL model. In particular, we see that the brms slope estimates of items 4
+and 5 are less extreme than those of mirt presumably due to the regularization
+implied by the hierarchical priors. The brms formula for the 3PL model looks as
+follows:
 
 ```{r, eval = FALSE, echo=TRUE}
 formula_3pl <- bf(
@@ -786,19 +705,19 @@ mirt_3pl <- mirt(spm_wide, model = 1, itemtype = "3PL", SE = TRUE,
 Note that, in the `family` argument, we now use `link = "identity"` instead
 of `link = "logit"` and build the logit link directly into the formula via
 `inv_logit(beta + exp(logalpha) * theta)`.
-This is necessary to correctly include guessing parameters [@brms3]. 
-As displayed in Figure \ref{fig:item-pars-3pl}, brms and mirt item parameter
+This is necessary to correctly include guessing parameters [@brms3]. As
+displayed in Figure \ref{fig:item-pars-3pl}, brms and mirt item parameter
 estimates of the 3PL model are still quite similar when it comes to locations
 and slopes. However, guessing parameter estimates are quite different: mirt
-obtains point estimates of 0 for all but 3 items whose uncertainty intervals
-range the whole definition space from 0 to 1. These uncertainty intervals should
-probably not be taken too seriously as the guessing probabilities are very
-unlikely to be anywhere close to 1. Presumably, this is an artifact due to the
-fact the point estimates are located at a boundary leading to a failure in the
-estimation of approximate standard error which underly the interval estimation.
-In contrast, point estimates of brms are close to but not exactly zero and
-corresponding uncertainty estimates appear more realistic then the those
-obtained by mirt. 
+obtains point estimates of 0 for all but 3 items with uncertainty intervals
+ranging the whole definition space from 0 to 1. These uncertainty intervals
+should probably not be taken too seriously as the guessing probabilities are
+very unlikely to be anywhere close to 1 by design of the SPM test. Presumably,
+this is caused by an artifact in the computation of the approximate standard
+errors because point estimates are located at the boundary of the parameter
+space. In contrast, point estimates of guessing parameters as obtained by brms
+are close to but not exactly zero and corresponding uncertainty estimates appear
+more realistic (i.e., much narrower) then those obtained by mirt.
 
 On Github, we also report results for the 3PL model with guessing probabilities
 fixed to $1/8$ derived under the assumptions that, in case of guessing, all
@@ -819,19 +738,6 @@ person_pars_3pl <- person_pars_3pl %>%
 	as_tibble() %>%
 	rownames_to_column(var = "id") %>%
   mutate(id = as.numeric(id))
-
-# plot person parameters
-# person_pars_3pl %>%
-#   arrange(Estimate) %>%
-#   mutate(id2 = seq_len(n())) %>%
-# 	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-# 	geom_pointrange(alpha = 0.7) +
-# 	coord_flip() +
-# 	labs(x = "Person Number (sorted after Estimate)") +
-#   theme(
-#     axis.text.y = element_blank(),
-#     axis.ticks.y = element_blank()
-#   )
 ```
 
 ```{r}
@@ -913,41 +819,46 @@ item_pars_3pl %>%
 	labs(x = "Item Number")
 ```
 
-```{r person-pars-3pl, fig.height=4, fig.width=8, fig.cap = "Comparison of 3PL person parameters as estimated by brms and mirt. Left: Scatter plot of point estimates. Right: Scatter plot of the associated standard errors (SE)."}
+```{r person-pars-3pl, fig.height=4, fig.width=8, fig.cap = "Comparison of 3PL person parameters as estimated by brms and mirt. Left: Scatter plot of point estimates. Right: Scatter plot of the associated uncertainty interval widths (UIW)."}
 # plot comparison of person parameters
-plot_person_pars_3pl_1 <- person_pars_3pl %>%
+person_pars_3pl_all <- person_pars_3pl %>% 
   bind_cols(mirt_person_pars_3pl) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+plot_person_pars_3pl_1 <- person_pars_3pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
 		x = "Estimate (brms)",
 	  y = "Estimate (mirt)",
-		color = "SE (brms)"
+		color = "UIW (brms)"
 	)
 
-plot_person_pars_3pl_2 <- person_pars_3pl %>%
-  bind_cols(mirt_person_pars_3pl) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+plot_person_pars_3pl_2 <- person_pars_3pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SE (brms)",
-	  y = "SE (mirt)",
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
 		color = "Estimate (brms)"
 	)
 
 plot_person_pars_3pl_1 + plot_person_pars_3pl_2
 ```
 
-In Figure \ref{fig:person-pars-3pl}, we display person parameter estimates of
+In Figure \ref{fig:person-pars-3pl}, I display person parameter estimates of
 the 3PL model. As we can see on the left-hand side of Figure
 \ref{fig:person-pars-3pl}, point estimates of brms and mirt align very closely.
-Howerver, As displayes on the right-hand side of Figure
+However, as displayed on the right-hand side of Figure
 \ref{fig:person-pars-3pl}, uncertainty estimates show some deviations,
 especially for more extreme point estimates (i.e., particularily good or bad
 performing participants). The brms formula for the 4PL model looks as follows:
@@ -980,11 +891,11 @@ mirt_4pl <- mirt(
 ```
 
 As displayed in Figure \ref{fig:item-pars-4pl}, brms and mirt item parameter
-estimates of the 4PL model differ strongly from each other with mirt obtaining
-a lot of more extreme estimates. Further, mirt could obtain uncertainty estimates
-due to singularity of the information matrix. It is plausible that the 4PL
-model is too difficult to be estimated based on the given data via maximum
-likelihood without further regularization, for instance as provided by priors. 
+estimates of the 4PL model differ strongly from each other. In particular, mirt
+point estimates were more extreme and no uncertainty estimates could be obtained
+due to singularity of the information matrix. It is plausible that the 4PL model
+is too difficult to be estimated based on the given data via maximum likelihood
+without further regularization.
 
 ```{r}
 # extract and scale person parameters
@@ -999,19 +910,6 @@ person_pars_4pl <- person_pars_4pl %>%
 	as_tibble() %>%
 	rownames_to_column(var = "id") %>%
   mutate(id = as.numeric(id))
-
-# plot person parameters
-# person_pars_4pl %>%
-#   arrange(Estimate) %>%
-#   mutate(id2 = seq_len(n())) %>%
-# 	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-# 	geom_pointrange(alpha = 0.7) +
-# 	coord_flip() +
-# 	labs(x = "Person Number (sorted after Estimate)") +
-#   theme(
-#     axis.text.y = element_blank(),
-#     axis.ticks.y = element_blank()
-#   )
 ```
 
 ```{r}
@@ -1023,35 +921,6 @@ mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
     Q97.5 = Estimate + 1.96 * Est.Error,
     id = seq_len(n())
   )
-```
-
-```{r}
-# plot comparison of person parameters
-# person_pars_4pl %>%
-#   bind_cols(mirt_person_pars_4pl) %>%
-# 	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(-4, 5), y = c(-4, 5)) +
-# 	labs(
-# 		x = "Mean (brms)",
-# 	  y = "Mean (mirt)",
-# 		color = "SD (brms)"
-# 	)
-
-# person_pars_4pl %>%
-#   bind_cols(mirt_person_pars_4pl) %>%
-# 	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
-# 	geom_point() +
-# 	geom_abline() +
-# 	scale_color_viridis_c() +
-# 	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
-# 	labs(
-# 		x = "SD (brms)",
-# 	  y = "SD (mirt)",
-# 		color = "Mean (brms)"
-# 	)
 ```
 
 ```{r}
@@ -1137,20 +1006,19 @@ item_pars_4pl %>%
 
 ## Model Comparison
 
-One central aim of @myszkowski2018 was to investigate the required model
-complexity to reasonably describe the SPM data. Here, we approach this question
-using Bayesian approximate leave-one-out cross-validation [LOO-CV;
-@vehtari2017psis; @vehtari2017loo; @loo2018] as a method for model comparison,
-which is closely related model comparison via information criteria
+Next, I investigate the required model complexity to reasonably describe the SPM
+data. For this purpose, I apply Bayesian approximate leave-one-out
+cross-validation [LOO-CV; @vehtari2017psis; @vehtari2017loo; @loo2018] as a
+method for model comparison, which is closely related to information criteria
 [@vehtari2017loo]. As shown in Table \ref{tab:loo-compare}, 3PL and 4PL models
 fit substantially better than the 1PL and 2PL models, while there was little
 difference between the former two. Accordingly, in the interest of parsimony, I
 would tend to prefer the 3PL model if a single model needed to be chosen. This
-coincides with the conclusions of @myszkowski2018. Independently of the 
-difference in model fit, person parameters
-correlated very strongly between different models and different packages (i.e.,
-brms or mirt), with pairwise correlations exceeding $r = 0.97$ in all cases (see
-Figure \ref{fig:person-pars-all} for an illustration).
+coincides with the conclusions of @myszkowski2018. Independently of the
+difference in model fit, person parameters correlated very strongly between
+different models and estimation approaches, with pairwise correlations exceeding
+$r = 0.97$ in all cases (see Figure \ref{fig:person-pars-all} for an
+illustration).
 
 ```{r loo-compare, warning=FALSE, results= "asis"}
 loo_compare <- loo_compare(fit_4pl, fit_3pl, fit_2pl, fit_1pl)
@@ -1221,10 +1089,10 @@ person_pars_all %>%
 
 # Discussion
 
-In the present paper, we have reanalysed data to validate a short version of the
+In the present paper, I have reanalysed data to validate a short version of the
 Standard Progressive Matrices [SPM-LS; @myszkowski2018] using Bayesian IRT
 models via brms [@brms1; @brms2] and Stan [@carpenter2017]. By comparing
-out-of-sample predictive performance, we found evidence that the 3PL model with
+out-of-sample predictive performance, I found evidence that the 3PL model with
 estimated guessing parameters outperformed simpler models and performed
 similarly well than the 4PL model, which additionally estimated lapse parameters.
 As specifying and fitting the 4PL model is substantially more involved than the
@@ -1238,8 +1106,8 @@ predictive performance [approximate leave-one-out cross-validation;
 
 With regard to item parameters, Bayesian and frequentist estimates showed
 several important differences for the most complex 3PL and 4PL IRT models.
-First, point estimates of items with paritcularily high difficulty or slope
-(i.e., items 11 and 12) were more extreme in the frequentist estimation. One
+First, point estimates of items with particularily high difficulty or slope
+were more extreme in the frequentist estimation. One
 central reason is likely the use weakly informative priors in the Bayesian
 models which effectively shrunk extremes a little towards the mean thus
 providing more conservative and robust estimates [@gelman2013]. Specifically for

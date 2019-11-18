@@ -215,30 +215,36 @@ mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
 ```
 
 ```{r}
-person_pars_1pl %>%
+# plot comparison of person parameters
+person_pars_1pl_all <- person_pars_1pl %>% 
   bind_cols(mirt_person_pars_1pl) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_1pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Mean (brms)",
-	  y = "Mean (mirt)",
-		color = "SD (brms)"
+		x = "Estimate (brms)",
+	  y = "Estimate (mirt)",
+		color = "UIW (brms)"
 	)
 
-person_pars_1pl %>%
-  bind_cols(mirt_person_pars_1pl) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+person_pars_1pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SD (brms)",
-	  y = "SD (mirt)",
-		color = "Mean (brms)"
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
+		color = "Estimate (brms)"
 	)
 ```
 
@@ -371,30 +377,35 @@ mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
 
 ```{r}
 # plot comparison of person parameters
-person_pars_2pl %>%
+person_pars_2pl_all <- person_pars_2pl %>% 
   bind_cols(mirt_person_pars_2pl) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_2pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Mean (brms)",
-	  y = "Mean (mirt)",
-		color = "SD (brms)"
+		x = "Estimate (brms)",
+	  y = "Estimate (mirt)",
+		color = "UIW (brms)"
 	)
 
-person_pars_2pl %>%
-  bind_cols(mirt_person_pars_2pl) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+person_pars_2pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SD (brms)",
-	  y = "SD (mirt)",
-		color = "Mean (brms)"
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
+		color = "Estimate (brms)"
 	)
 ```
 
@@ -550,30 +561,35 @@ mirt_person_pars_3pl_fixed <-
 
 ```{r}
 # plot comparison of person parameters
-person_pars_3pl_fixed %>%
+person_pars_3pl_fixed_all <- person_pars_3pl_fixed %>% 
   bind_cols(mirt_person_pars_3pl_fixed) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_3pl_fixed_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Mean (brms)",
-	  y = "Mean (mirt)",
-		color = "SD (brms)"
+		x = "Estimate (brms)",
+	  y = "Estimate (mirt)",
+		color = "UIW (brms)"
 	)
 
-person_pars_3pl_fixed %>%
-  bind_cols(mirt_person_pars_3pl_fixed) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+person_pars_3pl_fixed_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SD (brms)",
-	  y = "SD (mirt)",
-		color = "Mean (brms)"
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
+		color = "Estimate (brms)"
 	)
 ```
 
@@ -730,30 +746,35 @@ mirt_person_pars_3pl <- fscores(mirt_3pl, full.scores.SE = TRUE) %>%
 
 ```{r}
 # plot comparison of person parameters
-person_pars_3pl %>%
+person_pars_3pl_all <- person_pars_3pl %>% 
   bind_cols(mirt_person_pars_3pl) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_3pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Mean (brms)",
-	  y = "Mean (mirt)",
-		color = "SD (brms)"
+		x = "Estimate (brms)",
+	  y = "Estimate (mirt)",
+		color = "UIW (brms)"
 	)
 
-person_pars_3pl %>%
-  bind_cols(mirt_person_pars_3pl) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+person_pars_3pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SD (brms)",
-	  y = "SD (mirt)",
-		color = "Mean (brms)"
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
+		color = "Estimate (brms)"
 	)
 ```
 
@@ -922,30 +943,35 @@ mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
 
 ```{r}
 # plot comparison of person parameters
-person_pars_4pl %>%
+person_pars_4pl_all <- person_pars_4pl %>% 
   bind_cols(mirt_person_pars_4pl) %>%
-	ggplot(aes(Estimate, Estimate1, color = Est.Error)) +
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_4pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(-4, 5), y = c(-4, 5)) +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Mean (brms)",
-	  y = "Mean (mirt)",
-		color = "SD (brms)"
+		x = "Estimate (brms)",
+	  y = "Estimate (mirt)",
+		color = "UIW (brms)"
 	)
 
-person_pars_4pl %>%
-  bind_cols(mirt_person_pars_4pl) %>%
-	ggplot(aes(Est.Error, Est.Error1, color = Estimate)) +
+person_pars_4pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
 	geom_point() +
 	geom_abline() +
 	scale_color_viridis_c() +
-	lims(x = c(0.3, 0.8), y = c(0.3, 0.8)) +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "SD (brms)",
-	  y = "SD (mirt)",
-		color = "Mean (brms)"
+		x = "UIW (brms)",
+	  y = "UIW (mirt)",
+		color = "Estimate (brms)"
 	)
 ```
 
