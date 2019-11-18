@@ -41,6 +41,7 @@ SPM_IRT_paper.tex
 SPM_IRT_paper.log
 SPM_IRT_paper.aux
 SPM_IRT_paper.out
+SPM_IRT_paper_files
 
 # additional analysis files
 SPM_IRT_analysis.R

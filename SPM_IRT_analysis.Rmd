@@ -112,7 +112,7 @@ names(answers) <- paste0("SPM", seq_along(answers))
 
 ```{r}
 spm_long <- read.csv("data/dataset.csv")  %>%
-  mutate(id = seq_len(n())) %>%
+  mutate(person = seq_len(n())) %>%
   gather("item", "response", SPM1:SPM12) %>%
   mutate(
     answer = answers[item],
@@ -123,9 +123,9 @@ spm_long <- read.csv("data/dataset.csv")  %>%
 
 ```{r}
 spm_wide <- spm_long %>% 
-  select(id, item, response2) %>%
+  select(person, item, response2) %>%
   spread("item", "response2") %>%
-  select(-id)
+  select(-person)
 ```
 
 ## Analysis {.tabset}
@@ -135,22 +135,26 @@ spm_wide <- spm_long %>%
 #### Model Fitting
 
 ```{r}
+formula_1pl <- bf(
+  formula = response2 ~ 1 + (1 | item) + (1 | person),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
 prior_1pl <- 
   prior("normal(0, 2)", class = "Intercept")
-  prior("normal(0, 3)", class = "sd", group = "id") + 
+  prior("normal(0, 3)", class = "sd", group = "person") + 
   prior("normal(0, 3)", class = "sd", group = "item")
 
 fit_1pl <- brm(
-  formula = response2 ~ 1 + (1 | item) + (1 | id),
+  formula = formula_1pl,
   data = spm_long,
-  family = brmsfamily("bernoulli", "logit"),
   prior = prior_1pl,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control,
   file = "models/fit_1pl"
 )
 
-fit_1pl <- add_loo(fit_1pl)
+fit_1pl <- add_loo(fit_1pl, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -169,7 +173,7 @@ mirt_1pl <- mirt(spm_wide, model = 1, itemtype = "Rasch", SE = TRUE,
 ```{r}
 # extract person parameters
 person_pars_1pl <- 
-  ranef(fit_1pl, summary = FALSE)$id[, , "Intercept"] 
+  ranef(fit_1pl, summary = FALSE)$person[, , "Intercept"] 
 
 person_sds_1pl <- apply(person_pars_1pl, 1, sd)
 
@@ -177,8 +181,8 @@ person_pars_1pl <- person_pars_1pl %>%
   sweep(1, person_sds_1pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_1pl %>%
@@ -205,7 +209,7 @@ mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
     Est.Error = Est.Error / scale,
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   ) %>%
   select(-scale)
 ```
@@ -287,30 +291,30 @@ item_pars_1pl %>%
 ```{r}
 formula_2pl <- bf(
   response2 ~ beta + exp(logalpha) * theta,
-  theta ~ 0 + (1 | id),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
-  nl = TRUE
+  family = brmsfamily("bernoulli", link = "logit")
 )
 
 prior_2pl <- 
   prior("normal(0, 2)", class = "b", nlpar = "beta") +
   prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
-  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta") + 
   prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha")
 
 fit_2pl <- brm(
   formula = formula_2pl,
   data = spm_long,
-  family = brmsfamily("bernoulli", "logit"),
   prior = prior_2pl,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control, inits = 0,
   file = "models/fit_2pl"
 )
 
-fit_2pl <- add_loo(fit_2pl)
+fit_2pl <- add_loo(fit_2pl, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -329,7 +333,7 @@ mirt_2pl <- mirt(spm_wide, model = 1, itemtype = "2PL", SE = TRUE,
 ```{r}
 # extract and scale person parameters
 person_pars_2pl <- 
-  ranef(fit_2pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_2pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_2pl <- apply(person_pars_2pl, 1, sd)
 
@@ -337,8 +341,8 @@ person_pars_2pl <- person_pars_2pl %>%
   sweep(1, person_sds_2pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_2pl %>%
@@ -361,7 +365,7 @@ mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -465,30 +469,30 @@ item_pars_2pl %>%
 ```{r}
 formula_3pl_fixed <- bf(
   response2 ~ 0.125 + 0.875 * inv_logit(beta + exp(logalpha) * theta),
-  theta ~ 0 + (1 | id),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
-  nl = TRUE
+  family = brmsfamily("bernoulli", link = "identity")
 )
 
 prior_3pl_fixed <- 
   prior("normal(0, 2)", class = "b", nlpar = "beta") +
   prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
-  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta") + 
   prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha")
 
 fit_3pl_fixed <- brm(
   formula = formula_3pl_fixed,
   data = spm_long,
-  family = brmsfamily("bernoulli", "identity"),
   prior = prior_3pl_fixed,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control, inits = 0,
   file = "models/fit_3pl_fixed"
 )
 
-fit_3pl_fixed <- add_loo(fit_3pl_fixed)
+fit_3pl_fixed <- add_loo(fit_3pl_fixed, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -507,7 +511,7 @@ mirt_3pl_fixed <- mirt(
 ```{r}
 # extract and scale person parameters
 person_pars_3pl_fixed <- 
-  ranef(fit_3pl_fixed, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_3pl_fixed, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_3pl_fixed <- apply(person_pars_3pl_fixed, 1, sd)
 
@@ -515,8 +519,8 @@ person_pars_3pl_fixed <- person_pars_3pl_fixed %>%
   sweep(1, person_sds_3pl_fixed, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_3pl_fixed %>%
@@ -540,7 +544,7 @@ mirt_person_pars_3pl_fixed <-
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -644,19 +648,20 @@ item_pars_3pl_fixed %>%
 formula_3pl <- bf(
   response2 ~ gamma + (1 - gamma) * 
     inv_logit(beta + exp(logalpha) * theta),
-  theta ~ 0 + (1 | id),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
   logitgamma ~ 1 + (1 |i| item),
   nlf(gamma ~ inv_logit(logitgamma)),
-  nl = TRUE
+  family = brmsfamily("bernoulli", link = "identity"),
 )
 
 prior_3pl <- 
   prior("normal(0, 2)", class = "b", nlpar = "beta") +
   prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
   prior("normal(-2, 0.5)", class = "b", nlpar = "logitgamma") +
-  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta") + 
   prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitgamma")
@@ -664,14 +669,13 @@ prior_3pl <-
 fit_3pl <- brm(
   formula = formula_3pl,
   data = spm_long,
-  family = brmsfamily("bernoulli", "identity"),
   prior = prior_3pl,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control, inits = 0,
   file = "models/fit_3pl"
 )
 
-fit_3pl <- add_loo(fit_3pl)
+fit_3pl <- add_loo(fit_3pl, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -688,7 +692,7 @@ mirt_3pl <- mirt(spm_wide, model = 1, itemtype = "3PL", SE = TRUE,
 ```{r}
 # extract and scale person parameters
 person_pars_3pl <- 
-  ranef(fit_3pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_3pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_3pl <- apply(person_pars_3pl, 1, sd)
 
@@ -696,8 +700,8 @@ person_pars_3pl <- person_pars_3pl %>%
   sweep(1, person_sds_3pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_3pl %>%
@@ -720,7 +724,7 @@ mirt_person_pars_3pl <- fscores(mirt_3pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -831,14 +835,15 @@ item_pars_3pl %>%
 formula_4pl <- bf(
   response2 ~ gamma + (1 - gamma - psi) * 
     inv_logit(beta + exp(logalpha) * theta),
-  theta ~ 0 + (1 | id),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
   logitgamma ~ 1 + (1 |i| item),
   nlf(gamma ~ inv_logit(logitgamma)),
   logitpsi ~ 1 + (1 |i| item),
   nlf(psi ~ inv_logit(logitpsi)),
-  nl = TRUE
+  family = brmsfamily("bernoulli", link = "identity")
 )
 
 prior_4pl <- 
@@ -846,7 +851,7 @@ prior_4pl <-
   prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
   prior("normal(-2, 0.5)", class = "b", nlpar = "logitgamma") +
   prior("normal(-2, 0.5)", class = "b", nlpar = "logitpsi") +
-  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta") + 
   prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitgamma") +
@@ -855,13 +860,12 @@ prior_4pl <-
 fit_4pl <- brm(
   formula = formula_4pl,
   data = spm_long,
-  family = brmsfamily("bernoulli", "identity"),
   prior = prior_4pl,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control, inits = 0,
   file = "models/fit_4pl"
 )
-fit_4pl <- add_loo(fit_4pl)
+fit_4pl <- add_loo(fit_4pl, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -880,7 +884,7 @@ mirt_4pl <- mirt(
 ```{r}
 # extract and scale person parameters
 person_pars_4pl <- 
-  ranef(fit_4pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_4pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_4pl <- apply(person_pars_4pl, 1, sd)
 
@@ -888,8 +892,8 @@ person_pars_4pl <- person_pars_4pl %>%
   sweep(1, person_sds_4pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_4pl %>%
@@ -912,7 +916,7 @@ mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -1056,17 +1060,17 @@ person_pars_all <- bind_rows(
 
 ```{r, fig.height=12, fig.width=12}
 person_pars_all %>%
-  select(Estimate, model, id) %>% 
+  select(Estimate, model, person) %>% 
   spread(model, Estimate) %>%
-  select(-id) %>%
+  select(-person) %>%
   GGally::ggpairs(aes(alpha = 0.4))
 ```
 
 ```{r, fig.height=12, fig.width=12}
 person_pars_all %>%
-  select(Est.Error, model, id) %>% 
+  select(Est.Error, model, person) %>% 
   spread(model, Est.Error) %>%
-  select(-id) %>%
+  select(-person) %>%
   GGally::ggpairs(aes(alpha = 0.4))
 ```
 
@@ -1077,14 +1081,15 @@ person_pars_all %>%
 ```{r}
 formula_4pl_cond <- bf(
   response2 ~ sigma * zeta + (1 - sigma) * inv_logit(beta + exp(logalpha) * theta),
-  theta ~ 0 + (1 | id),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
   logitsigma ~ 1 + (1 |i| item),
   nlf(sigma ~ inv_logit(logitsigma)),
   logitzeta ~ 1 + (1 |i| item),
   nlf(zeta ~ inv_logit(logitzeta)),
-  nl = TRUE
+  family = brmsfamily("bernoulli", link = "identity")
 )
 
 prior_4pl_cond <- 
@@ -1092,7 +1097,7 @@ prior_4pl_cond <-
   prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
   prior("normal(-2, 0.5)", class = "b", nlpar = "logitsigma") +
   prior("normal(-2, 0.5)", class = "b", nlpar = "logitzeta") +
-  prior("normal(0, 1)", class = "sd", group = "id", nlpar = "theta") + 
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta") + 
   prior("normal(0, 3)", class = "sd", group = "item", nlpar = "beta") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logalpha") +
   prior("normal(0, 1)", class = "sd", group = "item", nlpar = "logitsigma") +
@@ -1101,14 +1106,13 @@ prior_4pl_cond <-
 fit_4pl_cond <- brm(
   formula = formula_4pl_cond,
   data = spm_long,
-  family = brmsfamily("bernoulli", "identity"),
   prior = prior_4pl_cond,
   chains = cores, iter = iter, warmup = warmup,
   cores = cores, control = control, inits = 0,
   file = "models/fit_4pl_cond"
 )
 
-fit_4pl_cond <- add_loo(fit_4pl_cond)
+fit_4pl_cond <- add_loo(fit_4pl_cond, reloo = TRUE, chains = 1)
 ```
 
 ```{r}
@@ -1120,7 +1124,7 @@ summary(fit_4pl_cond)
 ```{r}
 # extract and scale person parameters
 person_pars_4pl_cond <- 
-  ranef(fit_4pl_cond, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_4pl_cond, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_4pl_cond <- apply(person_pars_4pl_cond, 1, sd)
 
@@ -1128,8 +1132,8 @@ person_pars_4pl_cond <- person_pars_4pl_cond %>%
   sweep(1, person_sds_4pl_cond, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 
 # plot person parameters
 person_pars_4pl_cond %>%
