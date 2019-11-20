@@ -487,7 +487,7 @@ mirt_1pl <- mirt(spm_wide, model = 1, itemtype = "Rasch", SE = TRUE,
 ```{r}
 # extract person parameters
 person_pars_1pl <- 
-  ranef(fit_1pl, summary = FALSE)$id[, , "Intercept"] 
+  ranef(fit_1pl, summary = FALSE)$person[, , "Intercept"] 
 
 person_sds_1pl <- apply(person_pars_1pl, 1, sd)
 
@@ -495,8 +495,8 @@ person_pars_1pl <- person_pars_1pl %>%
   sweep(1, person_sds_1pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 ```
 
 ```{r}
@@ -510,7 +510,7 @@ mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
     Est.Error = Est.Error / scale,
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   ) %>%
   select(-scale)
 ```
@@ -584,7 +584,7 @@ mirt_2pl <- mirt(spm_wide, model = 1, itemtype = "2PL", SE = TRUE,
 ```{r}
 # extract and scale person parameters
 person_pars_2pl <- 
-  ranef(fit_2pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_2pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_2pl <- apply(person_pars_2pl, 1, sd)
 
@@ -592,8 +592,8 @@ person_pars_2pl <- person_pars_2pl %>%
   sweep(1, person_sds_2pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 ```
 
 ```{r}
@@ -603,7 +603,7 @@ mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -728,7 +728,7 @@ present data.
 ```{r}
 # extract and scale person parameters
 person_pars_3pl <- 
-  ranef(fit_3pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_3pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_3pl <- apply(person_pars_3pl, 1, sd)
 
@@ -736,8 +736,8 @@ person_pars_3pl <- person_pars_3pl %>%
   sweep(1, person_sds_3pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 ```
 
 ```{r}
@@ -747,7 +747,7 @@ mirt_person_pars_3pl <- fscores(mirt_3pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -819,7 +819,7 @@ item_pars_3pl %>%
 	labs(x = "Item Number")
 ```
 
-```{r person-pars-3pl, fig.height=4, fig.width=8, fig.cap = "Comparison of 3PL person parameters as estimated by brms and mirt. Left: Scatter plot of point estimates. Right: Scatter plot of the associated uncertainty interval widths (UIW)."}
+```{r person-pars-3pl, fig.height=4, fig.width=8, fig.cap = "Comparison of 3PL person parameters as estimated by brms and mirt. Left: Scatter plot of point estimates. Right: Scatter plot of the associated 95% uncertainty interval widths (UIW)."}
 # plot comparison of person parameters
 person_pars_3pl_all <- person_pars_3pl %>% 
   bind_cols(mirt_person_pars_3pl) %>%
@@ -900,7 +900,7 @@ without further regularization.
 ```{r}
 # extract and scale person parameters
 person_pars_4pl <- 
-  ranef(fit_4pl, summary = FALSE)$id[, , "theta_Intercept"]
+  ranef(fit_4pl, summary = FALSE)$person[, , "theta_Intercept"]
 
 person_sds_4pl <- apply(person_pars_4pl, 1, sd)
 
@@ -908,8 +908,8 @@ person_pars_4pl <- person_pars_4pl %>%
   sweep(1, person_sds_4pl, "/") %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column(var = "id") %>%
-  mutate(id = as.numeric(id))
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
 ```
 
 ```{r}
@@ -919,7 +919,7 @@ mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
   mutate(
     Q2.5 = Estimate - 1.96 * Est.Error, 
     Q97.5 = Estimate + 1.96 * Est.Error,
-    id = seq_len(n())
+    person = seq_len(n())
   )
 ```
 
@@ -1080,9 +1080,9 @@ person_pars_all <- bind_rows(
 
 ```{r person-pars-all, fig.height=8, fig.width=8, fig.cap="Scatter plots, bivariate correlations, and marginal densities of person parameters from all models."}
 person_pars_all %>%
-  select(Estimate, model, id) %>% 
+  select(Estimate, model, person) %>% 
   spread(model, Estimate) %>%
-  select(-id) %>%
+  select(-person) %>%
   GGally::ggpairs(aes(alpha = 0.4))
 ```
 
@@ -1152,6 +1152,15 @@ In summary, we have were able to replicate several key findings of
 some important advantages over their frequentist counterparts when it comes to
 reliably fitting more complex response processes and providing sensible
 uncertainty estimates for all model parameters and other quantities of interest.
+
+# Acknowledgements
+
+To conduct the presented analyses and create this manuscript, we used the
+programming language R [@R] through the interface RStudio [@rstudio]. Further,
+the following R packages were crucial (in alphabetical order): brms [@brms1],
+dplyr [@dplyr], GGally [@GGally], ggplot2 [@ggplot2], kableExtra [@kableExtra],
+knitr [@knitr], mirt [@mirt], papaja [@papaja], patchwork [@patchwork],
+rmarkdown [@rmarkdown], rstan [@carpenter2017], and tidyr [@tidyr].
 
 # References {-}
 

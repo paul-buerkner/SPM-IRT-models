@@ -154,7 +154,7 @@ fit_1pl <- brm(
   file = "models/fit_1pl"
 )
 
-fit_1pl <- add_loo(fit_1pl, reloo = TRUE, chains = 1)
+fit_1pl <- add_loo(fit_1pl)
 ```
 
 ```{r}
@@ -320,7 +320,7 @@ fit_2pl <- brm(
   file = "models/fit_2pl"
 )
 
-fit_2pl <- add_loo(fit_2pl, reloo = TRUE, chains = 1)
+fit_2pl <- add_loo(fit_2pl)
 ```
 
 ```{r}
@@ -503,7 +503,7 @@ fit_3pl_fixed <- brm(
   file = "models/fit_3pl_fixed"
 )
 
-fit_3pl_fixed <- add_loo(fit_3pl_fixed, reloo = TRUE, chains = 1)
+fit_3pl_fixed <- add_loo(fit_3pl_fixed)
 ```
 
 ```{r}
@@ -670,7 +670,7 @@ formula_3pl <- bf(
   logalpha ~ 1 + (1 |i| item),
   logitgamma ~ 1 + (1 |i| item),
   nlf(gamma ~ inv_logit(logitgamma)),
-  family = brmsfamily("bernoulli", link = "identity"),
+  family = brmsfamily("bernoulli", link = "identity")
 )
 
 prior_3pl <- 
@@ -691,7 +691,7 @@ fit_3pl <- brm(
   file = "models/fit_3pl"
 )
 
-fit_3pl <- add_loo(fit_3pl, reloo = TRUE, chains = 1)
+fit_3pl <- add_loo(fit_3pl)
 ```
 
 ```{r}
@@ -886,7 +886,7 @@ fit_4pl <- brm(
   cores = cores, control = control, inits = 0,
   file = "models/fit_4pl"
 )
-fit_4pl <- add_loo(fit_4pl, reloo = TRUE, chains = 1)
+fit_4pl <- add_loo(fit_4pl)
 ```
 
 ```{r}
@@ -1138,7 +1138,7 @@ fit_4pl_cond <- brm(
   file = "models/fit_4pl_cond"
 )
 
-fit_4pl_cond <- add_loo(fit_4pl_cond, reloo = TRUE, chains = 1)
+fit_4pl_cond <- add_loo(fit_4pl_cond)
 ```
 
 ```{r}
