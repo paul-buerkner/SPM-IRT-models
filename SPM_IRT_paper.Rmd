@@ -29,6 +29,7 @@ class: doc
 lineno: yes
 figsintext: true
 # numbersections: false
+# mask: true
 encoding: UTF-8
 bibliography:
   - SPM_IRT_paper.bib
@@ -111,7 +112,7 @@ persons’ responses on a set of items measuring one or more latent constructs
 measurement. The best known IRT models are likely those for binary responses,
 which predict the probability of a correct answer depending on item's properties
 and the participant's latent abilities. As responses on SPM items can be
-categorized as either right or wrong, we will focus on these binary models in
+categorized as either right or wrong, I will focus on these binary models in
 the present paper [although other models for this data are possible as well; see
 @myszkowski2018]. @myszkowski2018, whose data I seek to reanalyse, used
 frequenstist IRT models for inference. In this paper, I will apply Bayesian IRT
@@ -137,7 +138,7 @@ seen the data. It thus allows to explicitely incorporate prior knowledge into
 the model and/or to help identifying the model.
 In practice, we will factorize the joint prior $p(\theta, \xi)$ into
 the product of $p(\theta)$ and $p(\xi)$ so that we can specify priors on person
-and items parameters independently. We will provide more details on likelihoods
+and items parameters independently. I will provide more details on likelihoods
 and priors for Bayesian IRT models in the next section. The marginal likelihood
 $p(y)$ serves as a normalizing constant so that the posterior is an actual
 probability distribution. Except in the context of specific methods (i.e., Bayes
@@ -185,7 +186,7 @@ y_{ji} \sim \text{Bernoulli}(p_{ji})
 Across all models considered here, we will assume that all items measure a
 single latent person trait $\theta_j$. For the present data, we can expect
 $\theta_j$ to represent something closely related to fluit intelligence
-[@myszkowski2018]. The most complex model we will consider in this paper is the
+[@myszkowski2018]. The most complex model I will consider in this paper is the
 4-parameter logistic (4PL) model and all other simpler models result from this
 model by fixing some item parameters to certain values. In the 4PL model, we
 express $P(y_{ji} = 1)$ via the equation
@@ -268,13 +269,13 @@ by dividing the other by the same constant without changing the likelihood.
 Third, we need to have software that is able to do the model fitting for us,
 unless we want to hand code every estimation algorithm on our own. Using existing
 software requires to (re-)express our models in a way the software understands.
-We will focus on the last issue first and then adress the former two. 
+I will focus on the last issue first and then adress the former two. 
 
 ## IRT Models as Regression Models
 
 There are a lot of IRT specific software packages available, in particular in
 the programming language R, for example, mirt [@mirt] or TAM [@TAM; see
-@brms3 for a detailed comparison]. However, in this paper, we will use the brms
+@brms3 for a detailed comparison]. However, in this paper, I will use the brms
 package [@brms1; @brms2], which is not focussed specifically on IRT models but
 more generally on (Bayesian) regression models. Accordingly, we need to
 rewrite our IRT models in a form that is understandable for brms or other packages
@@ -481,7 +482,7 @@ spm_long %>%
 
 ## Model Estimation
 
-Following the principal of building models bottom-up, we start with the 
+Following the principal of building models bottom-up, I start with the 
 estimation of the most simple sensible model, that is, the 1PL model.
 Its formula can be specified in brms as
 
@@ -1115,7 +1116,7 @@ similarly well than the 4PL model, which additionally estimated lapse parameters
 As specifying and fitting the 4PL model is substantially more involved than the
 3PL model without apparent gains in out-of-sample predictive performance, we
 argue that the 3PL model should probably be the model of choice within the scope
-of all models considered here. That is, we come to a similar conclusion as
+of all models considered here. That is, I come to a similar conclusion as
 @myszkowski2018 in their original analysis despite using different frameworks
 for model specification and estimation (Bayesian vs. frequentist) as well as
 predictive performance [approximate leave-one-out cross-validation;
@@ -1139,7 +1140,7 @@ standard errors of items parameters in the 4PL model due to singularity of the
 information matrix. Even when computable, uncertainty estimates provided by the
 frequentist IRT models were not always meaningful. For instance, in the 3PL
 model, the confidence intervals of guessing parameters estimated close zero were
-ranging the whole definition space between zero and one. We would argue that
+ranging the whole definition space between zero and one. I would argue that
 this bascially represents a failure in the computational procedure of the
 standard errors due the the point estimates being very close to one of the
 boundaries. As such, these extreme uncertainty estimates should not be taken
@@ -1152,11 +1153,11 @@ regularization could also be implemented on top of a maximum likelihood
 procedure which would have likely improved some of the more unrealistic
 point estimates.
 
-With regard to point estimates of person parameters, we found little differences
+With regard to point estimates of person parameters, I found little differences
 between all considered Bayesian and frequentist IRT models. Pairwise
 correlations between point estimates of two different models were all exceeding
 $r = 0.97$ and often even larger than $r = 0.99$.  That is, we may consider them
-as basically equivalent for all practical purposes. However, we found
+as basically equivalent for all practical purposes. However, I found
 substantial differences in the uncertainty estimates of person parameters across
 models. That is, even though point estimates were highly similar across model
 classes, it is still important to choose an appropriately complex model for the
@@ -1168,7 +1169,7 @@ estimation uncertainty into account. In addition, uncertainty estimates of
 Bayesian and frequentist models varied substantially even within the same model
 class, in particular for 3PL and 4PL models. Without a known ground truth, we
 have no direct evidence which of the uncertainty estimates are more accurate
-(with respect to some Bayesian and/or frequentist criteria), but we would argue
+(with respect to some Bayesian and/or frequentist criteria), but I would argue
 in favor of the Bayesian results as they should have benefited from to the
 application of weakly informative priors and overall more robust inference
 procedures for the considered class of models. All in all, it is unsurprising
@@ -1182,8 +1183,8 @@ are valid options in this case and neither should be attacked. Developing this
 understanding seems necessary with the increased application of Bayesian methods
 and the accompanying arguments of whether this is a valid option.
 
-In summary, we have were able to replicate several key findings of
-@myszkowski2018. Additionally, we demonstrated that Bayesian IRT models have
+In summary, I was able to replicate several key findings of
+@myszkowski2018. Additionally, I demonstrated that Bayesian IRT models have
 some important advantages over their frequentist counterparts when it comes to
 reliably fitting more complex response processes and providing sensible
 uncertainty estimates for all model parameters and other quantities of interest.
@@ -1191,7 +1192,7 @@ uncertainty estimates for all model parameters and other quantities of interest.
 # Acknowledgements
 
 I want to thank Marie Beisemann for valuable comments on earlier versions of the
-paper. To conduct the presented analyses and create this paper, we used the
+paper. To conduct the presented analyses and create this paper, I used the
 programming language R [@R] through the interface RStudio [@rstudio]. Further,
 the following R packages were crucial (in alphabetical order): brms [@brms1],
 dplyr [@dplyr], GGally [@GGally], ggplot2 [@ggplot2], kableExtra [@kableExtra],
