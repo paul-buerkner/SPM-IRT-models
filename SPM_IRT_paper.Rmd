@@ -14,7 +14,8 @@ abstract: |
   Raven’s Standard Progressive Matrices (SPM) test and related matrix-based
   tests are widely applied measures of cognitive ability. Using Bayesian Item
   Response Theory (IRT) models, I reanalyse data of an SPM short form proposed
-  by Myszkowski & Storme (2018). Results indicate that a 3-parameter logistic
+  by Myszkowski & Storme (2018) and, at the same time, illustrate the application 
+  of these models. Results indicate that a 3-parameter logistic
   (3PL) model is sufficient to describe participants dichotomous responses
   (correct vs. incorrect) while persons' ability parameters are quite robust
   across IRT models of varying complexity. These conclusions are in line with
@@ -92,37 +93,38 @@ due to language and cultural differenes, they are considered one of the purest
 measures of fluid intelligence [@myszkowski2018]. However, a disadvantage of the
 original SPM is that its administration takes considerable time as 60 items have
 to be answered and time limits are either very loose or not imposed at all
-[e.g., @pind2003]. Thus, using it as part of a bigger procedure involving the
-administration of multiple tests and/or experiments may be problematic. This is
-not only due to direct time restrictions but also because participants'
-motivation and concentration tends to decline over the course of the complete
-procedure potentially leading to less valid measurements [e.g., @ackerman2009].
+[e.g., @pind2003]. Thus, using it as part of a bigger procedure involving
+the administration of the SPM as part of a battery of tests and/or experiments
+may be problematic. This is not only due to direct time restrictions but also
+because participants' motivation and concentration tends to decline over the
+course of the complete procedure, potentially leading to less valid measurements
+[e.g., @ackerman2009].
 
 Recently, @myszkowski2018 have proposed a short version of the original SPM
-test, called SPM-LS, comprising only the last block of 12 most complex SPM items
-and evaluated its statistical properties using methods of Item Response Theory
-(IRT). IRT is widely applied in the human sciences to model persons’ responses
-on a set of items measuring one or more latent constructs [for a comprehensive
-introduction see @lord2012; @embretson2013;
+test, called SPM-LS, comprising only the last block of the 12 most complex SPM
+items. They evaluated the statistical properties of the SPM-LS using methods of
+Item Response Theory (IRT). IRT is widely applied in the human sciences to model
+persons’ responses on a set of items measuring one or more latent constructs
+[for a comprehensive introduction see @lord2012; @embretson2013;
 @vanderlinden2013]. Due to its flexibility compared to Classical Test Theory
 (CTT), IRT provides the formal statistical basis for most modern psychological
 measurement. The best known IRT models are likely those for binary responses,
-which predict the probability of a correct answer depending on the item's
-difficulty and potentially other item properties as well as the participant's
-latent abilities. As responses on SPM items can be categorized as either right
-or wrong, we will focus on these binary models in the present paper [although
-other models for this data are possible as well; see @myszkowski2018].
-@myszkowski2018, whose data I seek to reanalyse, used frequenstist IRT models
-for inference. In this paper, I will apply Bayesian IRT models instead and
-investigate potential differences to the original results. In doing so, I hope
-to improve our unstanding of the robustness of the inference obtainable from the
-SPM-LS test.
+which predict the probability of a correct answer depending on item's properties
+and the participant's latent abilities. As responses on SPM items can be
+categorized as either right or wrong, we will focus on these binary models in
+the present paper [although other models for this data are possible as well; see
+@myszkowski2018]. @myszkowski2018, whose data I seek to reanalyse, used
+frequenstist IRT models for inference. In this paper, I will apply Bayesian IRT
+models instead and investigate potential differences to the original results. In
+doing so, I hope to improve our unstanding of the robustness of the inference
+obtainable from the SPM-LS test and to illustrate the application of Bayesian IRT methods.
 
 In Bayesian statistics applied to IRT, we aim to estimate the posterior
 distribution $p(\theta, \xi | y)$ of the person and item parameters ($\theta$
-and $\xi$, respectively) given the data $y$. We may be either interested in the
-posterior distribution directly, or in quantities that can be computed on its
-basis. The posterior distribution for an IRT model is defined as
+and $\xi$, respectively, which may vary in number depending on the model) given
+the data $y$. We may be either interested in the posterior distribution
+directly, or in quantities that can be computed on its basis. The posterior
+distribution for an IRT model is defined as
 \begin{equation}
 p(\theta, \xi | y) = \frac{p(y | \theta, \xi) \, p(\theta, \xi)}{p(y)}.
 \end{equation}
@@ -132,13 +134,14 @@ $p(y | \theta, \xi)$ is the distribution of the data given the parameters and
 thus relates the the data to the parameters. The prior distribution $p(\theta,
 \xi)$ describes the uncertainty in the person and item parameters before having
 seen the data. It thus allows to explicitely incorporate prior knowledge into
-the model. In practice, we will factorize the joint prior $p(\theta, \xi)$ into
+the model and/or to help identifying the model.
+In practice, we will factorize the joint prior $p(\theta, \xi)$ into
 the product of $p(\theta)$ and $p(\xi)$ so that we can specify priors on person
-and items parameters independently. We will detail likelihoods and priors for
-Bayesian IRT models in the next section. The marginal likelihood $p(y)$ serves
-as a normalizing constant so that the posterior is an actual probability
-distribution. Except in the context of specific methods (i.e., Bayes factors),
-$p(y)$ is rarely of direct interest.
+and items parameters independently. We will provide more details on likelihoods
+and priors for Bayesian IRT models in the next section. The marginal likelihood
+$p(y)$ serves as a normalizing constant so that the posterior is an actual
+probability distribution. Except in the context of specific methods (i.e., Bayes
+factors), $p(y)$ is rarely of direct interest.
 
 In frequentist statistics, parameter estimates are usually obtained by finding
 those parameter values that maximise the likelihood. In contrast, Bayesian
@@ -159,15 +162,15 @@ very intensive and thus fitting models using full Bayesian inference is usually
 much slower than in point estimation techniques. However, advantages of Bayesian
 inference -- such as greater modeling flexibility, prior distributions, and more
 informative results -- are often worth the increased computational cost
-[@gelman2013]. Whether Bayesian statistics offers relevant advantages for
+[@brms3; @gelman2013]. Whether Bayesian statistics offers relevant advantages for
 the IRT modelling of the SPM-LS data will be investigated in this paper.
 
 # Bayesian IRT Models
 
-In this section, I will introduce a set of Bayesian IRT models for binary
-data and unidimensional person traits. Suppose that for each pserson $j$ ($j = 1,
-\ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed a binary response
-$y_{ji}$ which is coded as $1$ for a correct answer and $0$ otherwise.
+In this section, I will introduce a set of Bayesian IRT models for binary data
+and unidimensional person traits. Suppose that for each pserson $j$ ($j = 1,
+\ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed a binary
+response $y_{ji}$ which is coded as $1$ for a correct answer and $0$ otherwise.
 
 ## Model Likelihood
 
@@ -191,7 +194,7 @@ express $P(y_{ji} = 1)$ via the equation
 P(y_{ji} = 1) = \gamma_i + (1 - \gamma_i - \psi_i) 
   \frac{1}{1 + \exp(-(\beta_i + \alpha_i \theta_j))}
 \end{equation}
-In the 4PL model, each item has 4 associated item parameters. The $\beta_i$
+In the 4PL model, each item has four associated item parameters. The $\beta_i$
 parameter describes the location of the item, that is, how easy or difficult it
 is in general. In the above formulation of the model, higher values of $\beta_i$
 imply higher success probabilities and hence $\beta_i$ can also be called the
@@ -202,56 +205,59 @@ none of these terms is used uniquely and their exact meaning can only be
 inferred in the context of a specific model [e.g., see @brms3 for a
 somewhat different use of the term 'discrimination' in IRT models]. For our
 purposes, we assume $\alpha_i$ to be positive as we expect answering the items
-correctly implies higher trait scores than when answering incorrectly. The
-$\gamma_i$ parameter describes the guessing proability, that is, the probability
-of any person to answer item $i$ correctly even if they do not know the right
-answer and thus have to guess. For obvious reasons, guessing is only relevant if
-the answer space is reasonably small. In the present data, participants saw a
-set of $8$ possible answers of which exactly one was considered correct. Thus,
-guessing cannot be ruled out and would be equal to $\gamma_i = 1/8$ for each
-item if guessing happend uniformly across all alternatives. Lastly, the
-$\psi_i$ parameter describes that participants may make mistakes even if the
-know the correct answer, perhaps because of inattention or simply misclicking
-when selecting the chosen answer. We may call $\psi_i$ the 'lapse',
+correctly implies higher trait scores than when answering incorrectly. Also,
+if we did not fix the sign of $\alpha_i$, we may run into identificaton issues
+as changing the sign of $\alpha_i$ could be compensated by changing the sign
+of $\theta_j$ without a change in the likelihood.
+
+The $\gamma_i$ parameter describes the guessing proability, that is, the
+probability of any person to answer item $i$ correctly even if they do not know
+the right answer and thus have to guess. For obvious reasons, guessing is only
+relevant if the answer space is reasonably small. In the present data,
+participants saw a set of $8$ possible answers of which exactly one was
+considered correct. Thus, guessing cannot be ruled out and would be equal to
+$\gamma_i = 1/8$ for each item if all answer alternatives had a uniform
+probability to be chosen given that a person guesses. Lastly, the $\psi_i$
+parameter enables us to model the possibilty that a participant makes a mistake
+even though they know the right answer, perhaps because of inattention or simply
+misclicking when selecting the chosen answer. We may call $\psi_i$ the 'lapse',
 'inattention', or 'slipping' parameter. Usually these terms can be used
 interchangably but, as always, the exact meaning can only be inferred in the
 context of the specific model. As the answer format in the present data (i.e.,
 'click on the right answer') is rather simple and participants have unlimited
 time for each item, mistakes due to lapses are unlikely to appear. However, by
 including a lapse parameter into our model, we are able to explictely check
-whether lapses played a substantial role in the data.
+whether lapses played a substantial role in the answers.
 
-We can now simplify the 4PL model in several steps
-to yield the other less complex models. The 3PL model results from the 4PL model
-by fixing the lapse probabilitiy to zero, that is, $\psi_i = 0$ for all
-items. In the next step, we can obtain the 2PL model from the 3PL model by also
-fixing the guessing proabilities to zero, that is, $\gamma_i = 0$ for all items.
-In the last simplification step, we obtain the 1PL model [also known as Rasch
-model; @rasch1961] from the 2PL model by assuming the factor loadings to be one,
-that is, $\alpha_i = 1$ for all items. The way I described the model classes
-above is top down in the way that I started with the most complex model.
-However, this is not how I would recommend doing the actual model building for a
-given data set, which I argue should be bottom-up, that is, starting from the
-most simple (but still sensible) model. The reason is that more complex models
-tend to be more complicated to fit in the sense that they both take longer
-(especially when using fully Bayesian estimation) and yield more
-convergence problems [e.g., @gelman2013; @brms3]. If we started by
-fitting the most complex model and, after considerable waiting time, found the
-model to not having converged, we may have no idea which of the several model
-components were causing the problem(s). In contrast, by starting simple and
-gradually building our way upwards to more complex models, we can make sure that
-each model component is reasonbly specified and can be reliabily estimated
-before we move further. As a result, when a problem occurs, we are likely to
-have much clearer understanding of why/where the it occured and how
-to fix it.
+We can now simplify the 4PL model in several steps to yield the other less
+complex models. The 3PL model results from the 4PL model by additionally fixing
+the lapse probabilitiy to zero, that is, $\psi_i = 0$ for all items. In the next
+step, we can obtain the 2PL model from the 3PL model by also fixing the guessing
+proabilities to zero, that is, $\gamma_i = 0$ for all items. In the last
+simplification step, we obtain the 1PL model [also known as Rasch model;
+@rasch1961] from the 2PL model by assuming the factor loadings to be one, that
+is, $\alpha_i = 1$ for all items. Even though didactially I find it most
+intuitive and helpful to introduce the models from most to least complex, I
+recommend the inverse order in applications. That is, starting from the most
+simple (but still sensible) model. The reason is that more complex models tend
+to be more complicated to fit in the sense that they both take longer
+(especially when using fully Bayesian estimation) and yield more convergence
+problems [e.g., @brms3; @gelman2013]. If we started by fitting the most complex
+model and, after considerable waiting time, found the model to not have
+converged, we may have no idea which of the several model components were
+causing the problem(s). In contrast, by starting simple and gradually building
+our way upwards to more complex models, we can make sure that each model
+component is reasonbly specified and can be reliabily estimated before we move
+further. As a result, when a problem occurs, we are likely to have much clearer
+understanding of why/where the it occured and how to fix it.
 
 With the model likelihood fully specified by equations (\ref{bernoulli}) and 
 (\ref{4pl}) (potentially with some fixed item parameters), we
 are, in theory, already able to obtain estimates of person and item
-parameters via maximum likelihood (ML) estimation. Howerver, there are multiple 
-things that can get into our way at this point.
-First, we may have simply not enough data to obtain
-sensible parameter estimates. As a rule of thumb, the more complex a model
+parameters via maximum likelihood (ML) estimation. However, there are multiple 
+potential issues that can get into our way at this point.
+First, we simply may not have enough data to obtain
+sensible parameter estimates. As a rule of thumb, the more complex a model,
 the more data we need to obtain the same estimation precision. Second,
 there may be components in the model which will not be identified no matter
 how much data we add. An example are binary IRT models from 2PL upwards as
@@ -278,14 +284,14 @@ The first implication of this change of frameworks is that we now think of the
 data in long format, with all responses from all participants on all items in
 the same data column coupled with additional columns for person and item
 indicators. That is, $y_{ji}$ is now formally written as $y_n$ where $n$ is the
-observation number ranging from $1$ to $N = JI$. If we needed to be more explit
+observation number ranging from $1$ to $N = J \times I$. If we needed to be more explit
 we could also use $y_{j_n i_n}$ to indicate that each observation number $n$ has
 specific indicators $j$ and $i$ associated with it. The same goes for item and
 person parameters. For example, we may write $\theta_{n_j}$ to refer to the
 ability parameter of the person $j$ to whom the $n$th observation belongs.
 
 One key aspect of regression models is that we try to express parameters on an
-unconstrained space that spans the whole real line. This allows to use linear
+unconstrained space that spans the whole real line. This allows for using linear
 (or more generally additive) predictor terms without having to worry about
 whether these predictor terms fulfill certain boundaries, for instance, are
 positive or within the unit interval $[0, 1]$. In the considered binary IRT
@@ -307,14 +313,15 @@ we use the logit-link (or equivalently the logistic response function) so that
 \psi &= \text{logistic}(\eta_{\psi})
   = \frac{1}{1 + \exp(-\eta_{\psi})}
 \end{align}
-where $\eta_{\gamma}$ and $\eta_{\psi}$ are uncontrained. The location
+where $\eta_{\gamma}$ and $\eta_{\psi}$ are unconstrained. The location
 parameters $\beta$ are already unbounded and as such do not need an additional
 link function so that simply $\beta = \eta_\beta$. The same goes for the ability
 parameters $\theta$. On the scale of the linear predictors, we can perform the
 usual regression operations, perhaps most importantly modeling predictor
 variables or including multilevel structure. In the present data, we do not have
 any additional person or item variables available so there will be no such
-predictors in our models [see @brms3 for examples]. However,
+predictors in our models [but see @brms3 for examples if you are interested in 
+this option]. However,
 there certainly is multilevel structure as we have both multiple observations
 per item and per person, which we seek to model appropriately, as detailed in
 the next section.
@@ -350,7 +357,7 @@ fitting.
 
 Using the prior distribution from (\ref{bprior1}), we would assume the
 item parameters of the same item to be unrelated but, in practice,
-it is very well plausible that there is actual correlation between them [@brms3].
+it is quite plausible that they are intercorrelated [@brms3].
 To account for such (linear) dependency, we can extend (\ref{bprior1}) to the
 multivariate case, so that we can model the vector $\tilde{\bm{b}}_i =
 (\tilde{b}_{\beta_i}, \tilde{b}_{\alpha_i}, \tilde{b}_{\gamma_i},
@@ -384,17 +391,27 @@ distribution of the same form as in (\ref{bprior1}):
 \end{equation}
 <!---->
 where, similar as for item parameters, $\sigma_\theta$ is a standard deviation
-parameter estimated as part of the model on which we put a weakly-informative 
-prior. In 2PL or more complex models, we can also fix $\sigma_\theta$ to 
-some value (usually $1$) as the scale is completely accounted for by
-the scale of the factor loadings. However, when using weakly-informative priors
-on both $\theta$ and $\alpha$ as well as on their hyperparameters, estimating
-$\sigma_\theta$ actually poses no problem for model estimation.
-Importantly, however, we do not include an overall person parameter
-$\overline{\theta}$ as done for item parameters in (\ref{ncp}) as this would
-conflict with the overall location parameter $\overline{b}_\beta$
-leading to substantial convergence problems in the absense very informative
-priors.
+parameter estimated as part of the model on which we put a weakly-informative
+prior. To give the reader in intuition: With the overall effects in our model,
+we model the probability that an average person (with an ability of zero, so
+imagine the ability to be centered) answers an average item (with all item
+parameters at their average values which we estimate). The varying effects then
+give us the deviations from the average person or item, so that we can
+"customize" our prediction of the solution probability to more or less able
+persons, more or less easy items, more or less discriminatory items, and so on
+and so forth.
+
+In 2PL or more complex models, we can also fix $\sigma_\theta$ to some value
+(usually $1$) as the scale is completely accounted for by the scale of the
+factor loadings $\sigma_alpha$. However, when using weakly-informative priors on
+both $\theta$ and $\alpha$ as well as on their hyperparameters, estimating
+$\sigma_\theta$ actually poses no problem for model estimation. Importantly,
+however, we do not include an overall person parameter $\overline{\theta}$ as
+done for item parameters in (\ref{ncp}) as this would conflict with the overall
+location parameter $\overline{b}_\beta$ leading to substantial convergence
+problems in the absense very informative priors. This does not limit the model's
+usefulness as only differences of person parameters are of relevance, not their
+absolute values on an (in principal) arbitrary latent scale.
 
 <!--
 The distributions in (\ref{bprior1}) and (\ref{bprior2}) also provides the basis
@@ -447,8 +464,8 @@ estimation in a multilevel regression framework. The relevant variables are the
 binary response of the participants (variable `response2`) coded as either
 correct (`1`) or incorrect (`0`) as well as `person` and `item` identifiers. In
 addition to estimating the IRT models in a Bayesian way, I also estimated them
-in the same way as in original analysis, that is, with the mirt package [@mirt]
-using the same estimation settings as @myszkowski2018.
+in the same manner as in the original analysis, that is, with the mirt package
+[@mirt] using the same estimation settings as @myszkowski2018.
 
 ```{r spm-data, results="asis", eval = FALSE}
 spm_long %>%
@@ -716,10 +733,10 @@ very unlikely to be anywhere close to 1 by design of the SPM test. Presumably,
 this is caused by an artifact in the computation of the approximate standard
 errors because point estimates are located at the boundary of the parameter
 space. In contrast, point estimates of guessing parameters as obtained by brms
-are close to but not exactly zero and corresponding uncertainty estimates appear
-more realistic (i.e., much narrower) then those obtained by mirt.
+are close to but not exactly zero for most items and corresponding uncertainty
+estimates appear more realistic (i.e., much narrower) then those obtained by mirt.
 
-On Github, we also report results for the 3PL model with guessing probabilities
+On Github, I also report results for the 3PL model with guessing probabilities
 fixed to $1/8$ derived under the assumptions that, in case of guessing, all
 alternatives are equally likely. According to Figure \ref{fig:item-pars-3pl} and
 model comparisons shown on GitHub, this assumption does not seem to hold for the
@@ -1104,6 +1121,9 @@ for model specification and estimation (Bayesian vs. frequentist) as well as
 predictive performance [approximate leave-one-out cross-validation;
 @vehtari2017loo vs. corrected AIC and $\chi^2$-based measures; @maydeu2013].
 
+Even though I reach the same conclusions as @myszkowski2018 reached with
+conventional frequentist methods, I would still like to point out some
+advantages of applying Bayesian methods that we have seen in this application.
 With regard to item parameters, Bayesian and frequentist estimates showed
 several important differences for the most complex 3PL and 4PL IRT models.
 First, point estimates of items with particularily high difficulty or slope
@@ -1126,7 +1146,11 @@ boundaries. As such, these extreme uncertainty estimates should not be taken
 seriously. In contrast, due to the use of weakly informative priors and more
 involved inference procedures, which require no approximations to estimate
 uncertainties, the Bayesian models provided sensible uncertainty estimates for
-all item parameters of every considered IRT model.
+all item parameters of every considered IRT model. While priors provide a
+natural and principled way to regularize inference, it should be noted that
+regularization could also be implemented on top of a maximum likelihood
+procedure which would have likely improved some of the more unrealistic
+point estimates.
 
 With regard to point estimates of person parameters, we found little differences
 between all considered Bayesian and frequentist IRT models. Pairwise
@@ -1137,15 +1161,26 @@ substantial differences in the uncertainty estimates of person parameters across
 models. That is, even though point estimates were highly similar across model
 classes, it is still important to choose an appropriately complex model for the
 data (i.e., the 3PL model in our case) in order to get sensible uncertainty
-estimates. The latter are not only relevant for individual diagnostic purposes
-but also when using person parameters as predictors in other models while taking
-their estimation uncertainty into account. In addition, uncertainty estimates of
+estimates. The latter are not only relevant for individual diagnostic purposes,
+which is undoubtly a major application of intelligence tests, but also when
+using person parameters as predictors in other models while taking their
+estimation uncertainty into account. In addition, uncertainty estimates of
 Bayesian and frequentist models varied substantially even within the same model
 class, in particular for 3PL and 4PL models. Without a known ground truth, we
-have no direct evidence which of the uncertainty estimates are more accurate,
-but we would tend to trust the Bayesian results more due to the application of
-weakly informative priors and overall more robust inference procedures for
-the considered class of models.
+have no direct evidence which of the uncertainty estimates are more accurate
+(with respect to some Bayesian and/or frequentist criteria), but we would argue
+in favor of the Bayesian results as they should have benefited from to the
+application of weakly informative priors and overall more robust inference
+procedures for the considered class of models. All in all, it is unsurprising
+that Bayesian methods have an easier time estimating uncertainty as it is more
+natural to do so in a Bayesian framework. We have also seen the important
+advantage of Bayesian methods that is their ability to more easily accomodate
+more complex models. Yet, we have also seen that for simpler models, Bayesian
+and frequentist methods provide very similar results, which really speaks in
+favour of both methods and should highlight for the reader, that both choices
+are valid options in this case and neither should be attacked. Developing this
+understanding seems necessary with the increased application of Bayesian methods
+and the accompanying arguments of whether this is a valid option.
 
 In summary, we have were able to replicate several key findings of
 @myszkowski2018. Additionally, we demonstrated that Bayesian IRT models have
@@ -1155,7 +1190,8 @@ uncertainty estimates for all model parameters and other quantities of interest.
 
 # Acknowledgements
 
-To conduct the presented analyses and create this manuscript, we used the
+I want to thank Marie Beisemann for valuable comments on earlier versions of the
+paper. To conduct the presented analyses and create this paper, we used the
 programming language R [@R] through the interface RStudio [@rstudio]. Further,
 the following R packages were crucial (in alphabetical order): brms [@brms1],
 dplyr [@dplyr], GGally [@GGally], ggplot2 [@ggplot2], kableExtra [@kableExtra],
