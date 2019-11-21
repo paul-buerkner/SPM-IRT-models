@@ -1,6 +1,6 @@
 ---
 title: "Supplements to Analysing Standard Progressive Matrics (SPM-LS) with Bayesian Item Response Models"
-author: "Paul Bürkner"
+author: "Paul Bürkner" 
 output:
   html_document:
     theme: default

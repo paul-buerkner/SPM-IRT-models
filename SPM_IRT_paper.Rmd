@@ -1196,8 +1196,9 @@ paper. To conduct the presented analyses and create this paper, I used the
 programming language R [@R] through the interface RStudio [@rstudio]. Further,
 the following R packages were crucial (in alphabetical order): brms [@brms1],
 dplyr [@dplyr], GGally [@GGally], ggplot2 [@ggplot2], kableExtra [@kableExtra],
-knitr [@knitr], mirt [@mirt], papaja [@papaja], patchwork [@patchwork],
-rmarkdown [@rmarkdown], rstan [@carpenter2017], and tidyr [@tidyr].
+knitr [@knitr], loo [@vehtari2017loo], mirt [@mirt], papaja [@papaja], patchwork
+[@patchwork], rmarkdown [@rmarkdown], rstan [@carpenter2017], and tidyr
+[@tidyr].
 
 # References {-}
 
