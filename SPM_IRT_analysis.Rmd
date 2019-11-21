@@ -1,6 +1,6 @@
 ---
-title: "Bayesian IRT Models for Intelligence Tests"
-author: "Paul Bürkner & Marie Beisemann"
+title: "Supplements to Analysing Standard Progressive Matrics (SPM-LS) with Bayesian Item Response Models"
+author: "Paul Bürkner"
 output:
   html_document:
     theme: default
