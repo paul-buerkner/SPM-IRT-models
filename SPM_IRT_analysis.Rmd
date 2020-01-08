@@ -1,5 +1,5 @@
 ---
-title: "Supplements to Analysing Standard Progressive Matrics (SPM-LS) with Bayesian Item Response Models"
+title: "Supplements to Analysing Standard Progressive Matrices (SPM-LS) with Bayesian Item Response Models"
 author: "Paul Bürkner" 
 output:
   html_document:
@@ -26,7 +26,7 @@ pre code {
 ## Setup
 
 ```{r setup, include=FALSE, cache=FALSE}
-knitr::opts_chunk$set(cache = FALSE, fig.width = 10)
+knitr::opts_chunk$set(cache = TRUE, fig.width = 10)
 ```
 
 ```{r general_options, cache=FALSE}
@@ -36,8 +36,8 @@ library(tibble)
 library(stringr)
 library(ggplot2)
 library(GGally)
-library(brms)
 library(mirt)
+library(brms)
 cores <- 4
 iter <- 3000
 warmup <- 1000
@@ -101,6 +101,55 @@ Mean <- function(df, vars, na.rm = TRUE) {
   out <- rowMeans(select(df, !!vars), na.rm = na.rm)
   ifelse(all_na, NA, out)
 }
+
+ll <- function(y, p) {
+  y * log(p) + (1 - y) * log(1 - p)
+}
+
+fit_statistic <- function(model, criterion, group, nsamples = NULL) {
+  group <- enquo(group)
+  subset <- NULL
+  if (!is.null(nsamples)) {
+    subset <- sample(seq_len(nsamples(model)), nsamples) 
+  }
+  ppe <- pp_expect(model, subset = subset) %>%
+    t() %>%
+    as.data.frame() %>%
+    cbind(model$data) %>%
+    gather("draw", "ppe", starts_with("V"))
+  
+  yrep <- posterior_predict(model, subset = subset) %>%
+    t() %>%
+    as.data.frame() %>%
+    cbind(spm_long) %>%
+    gather("draw", "yrep", starts_with("V"))
+  
+  ppe %>%
+    mutate(yrep = yrep$yrep) %>%
+    mutate(
+      crit = criterion(response2, ppe),
+      crit_rep = criterion(yrep, ppe)
+    ) %>%
+    group_by(!!group, draw) %>%
+    summarise(
+      crit = sum(crit), 
+      crit_rep = sum(crit_rep),
+      crit_diff = crit_rep - crit
+    ) %>%
+    mutate(draw = as.numeric(sub("^V", "", draw))) %>%
+    arrange(!!group, draw) %>%
+    identity()
+}
+
+theme_hist <- function(...) {
+  bayesplot::theme_default() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    ...
+  )
+}
 ```
 
 ## Data Preparation
@@ -117,7 +166,7 @@ spm_long <- read.csv("data/dataset.csv")  %>%
   mutate(
     answer = answers[item],
     response2 = as.numeric(response == answer),
-    item = as.numeric(sub("^SPM", "", item))
+    item = as.factor(as.numeric(sub("^SPM", "", item)))
   )
 ```
 
@@ -128,11 +177,9 @@ spm_wide <- spm_long %>%
   select(-person)
 ```
 
-## Analysis {.tabset}
+## 1PL Models {.tabset}
 
-### 1PL Models {.tabset}
-
-#### Model Fitting
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_1pl <- bf(
@@ -141,7 +188,7 @@ formula_1pl <- bf(
 )
 
 prior_1pl <- 
-  prior("normal(0, 2)", class = "Intercept")
+  prior("normal(0, 2)", class = "Intercept") +
   prior("normal(0, 3)", class = "sd", group = "person") + 
   prior("normal(0, 3)", class = "sd", group = "item")
 
@@ -158,20 +205,11 @@ fit_1pl <- add_loo(fit_1pl)
 ```
 
 ```{r}
-# obtain basic summaries
 summary(fit_1pl)
 plot(fit_1pl)
 ```
 
-```{r, results="hide"}
-mirt_1pl <- mirt(spm_wide, model = 1, itemtype = "Rasch", SE = TRUE,
-                 technical = list(NCYCLES = 10000))
-```
-
-#### Person Parameters
-
 ```{r}
-# extract person parameters
 person_pars_1pl <- 
   ranef(fit_1pl, summary = FALSE)$person[, , "Intercept"] 
 
@@ -184,7 +222,10 @@ person_pars_1pl <- person_pars_1pl %>%
 	rownames_to_column(var = "person") %>%
   mutate(person = as.numeric(person))
 
-# plot person parameters
+saveRDS(person_pars_1pl, "results/person_pars_1pl")
+```
+
+```{r}
 person_pars_1pl %>%
   arrange(Estimate) %>%
   mutate(id2 = seq_len(n())) %>%
@@ -199,7 +240,171 @@ person_pars_1pl %>%
 ```
 
 ```{r}
-mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
+person_fit_1pl <- fit_statistic(
+  fit_1pl, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_1pl <- person_fit_1pl %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_1pl <- which.max(person_diff_1pl$bp)
+person_fit_1pl %>% 
+  filter(person == person_max_1pl) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
+```
+
+```{r, fig.height=4}
+item_pars_1pl <- coef(fit_1pl, summary = FALSE)$item[, , "Intercept"] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column() %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  method = "MCMC-H"
+	)
+
+saveRDS(item_pars_1pl, "results/item_pars_1pl")
+```
+
+```{r}
+item_fit_1pl <- fit_statistic(
+  fit_1pl, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_1pl %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+### MCMC with non-hierarchical item priors
+
+```{r}
+formula_1pl_nh <- bf(
+  formula = response2 ~ 0 + item + (1 | person),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_1pl_nh <- 
+  prior("normal(0, 5)", class = "b") +
+  prior("normal(0, 3)", class = "sd", group = "person")
+
+fit_1pl_nh <- brm(
+  formula = formula_1pl_nh,
+  data = spm_long,
+  prior = prior_1pl_nh,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control,
+  file = "models/fit_1pl_nh"
+)
+
+fit_1pl_nh <- add_loo(fit_1pl_nh)
+```
+
+```{r}
+summary(fit_1pl_nh)
+plot(fit_1pl_nh)
+```
+
+```{r}
+person_pars_1pl_nh <- 
+  ranef(fit_1pl_nh, summary = FALSE)$person[, , "Intercept"] 
+
+person_sds_1pl_nh <- apply(person_pars_1pl_nh, 1, sd)
+
+person_pars_1pl_nh <- person_pars_1pl_nh %>%
+  sweep(1, person_sds_1pl_nh, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
+
+saveRDS(person_pars_1pl_nh, "results/person_pars_1pl_nh")
+```
+
+```{r}
+person_pars_1pl_nh %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+person_fit_1pl_nh <- fit_statistic(
+  fit_1pl_nh, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_1pl_nh <- person_fit_1pl_nh %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_1pl_nh <- which.max(person_diff_1pl_nh$bp)
+person_fit_1pl_nh %>% 
+  filter(person == person_max_1pl_nh) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
+```
+
+```{r, fig.height=4}
+item_pars_1pl_nh <- brms::fixef(fit_1pl_nh, summary = FALSE) %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column() %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  item = item - 0.1,
+	  method = "MCMC-NH"
+	)
+
+saveRDS(item_pars_1pl_nh, "results/item_pars_1pl_nh")
+```
+
+```{r}
+item_fit_1pl_nh <- fit_statistic(
+  fit_1pl_nh, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_1pl_nh %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MAP
+
+```{r, results="hide"}
+parprior_1pl_map <- list(c(seq(2, 46, 4), "norm", 0, 5))
+
+fit_1pl_map <- mirt(
+  spm_wide, model = 1, 
+  itemtype = "Rasch", SE = TRUE,
+  technical = list(NCYCLES = 10000), 
+  parprior = parprior_1pl_map
+)
+```
+
+```{r}
+person_pars_1pl_map <- fscores(fit_1pl_map, full.scores.SE = TRUE) %>%
   as.data.frame() %>%
   rename(Estimate = "F1", Est.Error = "SE_F1") %>%
   mutate(
@@ -212,12 +417,77 @@ mirt_person_pars_1pl <- fscores(mirt_1pl, full.scores.SE = TRUE) %>%
     person = seq_len(n())
   ) %>%
   select(-scale)
+
+saveRDS(person_pars_1pl_map, "results/person_pars_1pl_map")
 ```
+
+```{r}
+item_pars_1pl_map <- coef(fit_1pl_map, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.d$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.2,
+    method = "MAP"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+
+saveRDS(item_pars_1pl_map, "results/item_pars_1pl_map")
+```
+
+
+### ML
+
+```{r, results="hide"}
+fit_1pl_ml <- mirt(spm_wide, model = 1, itemtype = "Rasch", SE = TRUE,
+                   technical = list(NCYCLES = 10000))
+```
+
+```{r}
+person_pars_1pl_ml <- fscores(fit_1pl_ml, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 1PL model
+    scale = sd(Estimate) / sd(person_pars_1pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_1pl_ml, "results/person_pars_1pl_ml")
+```
+
+```{r}
+item_pars_1pl_ml <- coef(fit_1pl_ml, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.d$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.3,
+    method = "ML"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+
+saveRDS(item_pars_1pl_ml, "results/item_pars_1pl_ml")
+```
+
+
+### Joint plots: Person parameters
 
 ```{r}
 # plot comparison of person parameters
 person_pars_1pl_all <- person_pars_1pl %>% 
-  bind_cols(mirt_person_pars_1pl) %>%
+  bind_cols(person_pars_1pl_ml) %>%
   mutate(
     UIW = Q97.5 - Q2.5,
     UIW1 = Q97.51 - Q2.51
@@ -230,9 +500,9 @@ person_pars_1pl_all %>%
 	scale_color_viridis_c() +
 	lims(x = c(-3, 2), y = c(-3, 2)) +
 	labs(
-		x = "Estimate (brms)",
-	  y = "Estimate (mirt)",
-		color = "UIW (brms)"
+		x = "Estimate (MCMC-H)",
+	  y = "Estimate (ML)",
+		color = "UIW (MCMC-H)"
 	)
 
 person_pars_1pl_all %>%
@@ -242,57 +512,36 @@ person_pars_1pl_all %>%
 	scale_color_viridis_c() +
 	lims(x = c(1, 2.4), y = c(1, 2.4)) +
 	labs(
-		x = "UIW (brms)",
-	  y = "UIW (mirt)",
-		color = "Estimate (brms)"
+		x = "UIW (MCMC-H)",
+	  y = "UIW (ML)",
+		color = "Estimate (MCMC-H)"
 	)
 ```
 
-#### Item Parameters
-
-```{r, fig.height=4}
-# extract item parameters
-item_pars_1pl <- coef(fit_1pl, summary = FALSE)$item[, , "Intercept"] %>%
-  posterior_summary() %>%
-	as_tibble() %>%
-	rownames_to_column() %>%
-	rename(item = "rowname") %>%
-	mutate(
-	  item = as.numeric(item),
-	  package = "brms"
-	)
-```
-
-```{r}
-mirt_item_pars_1pl <- coef(mirt_1pl, as.data.frame = TRUE) %>%
-  as.data.frame() %>%
-  rownames_to_column() %>%
-  filter(str_detect(rowname, "\\.d$")) %>%
-  mutate(
-    item = str_match(rowname, "^X[[:digit:]]+") %>%
-      str_remove("^X") %>%
-      as.numeric(),
-    item = item - 0.3,
-    package = "mirt"
-  ) %>%
-  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
-```
+### Joint plots: Item parameters
   
 ```{r}
-# plot item parameters
 item_pars_1pl %>%
-  bind_rows(mirt_item_pars_1pl) %>%
-	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  bind_rows(
+    item_pars_1pl_nh,
+    item_pars_1pl_map, 
+    item_pars_1pl_ml
+  ) %>%
+  mutate(
+    method = factor(method, levels = c("MCMC-H", "MCMC-NH", "MAP", "ML"))
+  ) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = method)) +
   scale_x_continuous(breaks = 1:12) +
 	geom_pointrange() +
-  scale_color_manual(name = "Package", values = c("black", "grey")) +
+  scale_color_viridis_d(name = "Method") +
 	coord_flip() +
 	labs(x = "Item Number")
 ```
 
-### 2PL Models {.tabset}
 
-#### Model Fitting
+## 2PL Models {.tabset}
+
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_2pl <- bf(
@@ -324,22 +573,13 @@ fit_2pl <- add_loo(fit_2pl)
 ```
 
 ```{r}
-# obtain some basic summaries
 summary(fit_2pl)
-plot(fit_2pl, pars = c("sd", "cor"))
+plot(fit_2pl)
 ```
-
-```{r, results="hide"}
-mirt_2pl <- mirt(spm_wide, model = 1, itemtype = "2PL", SE = TRUE,
-                 technical = list(NCYCLES = 10000))
-```
-
-#### Person Parameters
 
 ```{r}
-# extract and scale person parameters
 person_pars_2pl <- 
-  ranef(fit_2pl, summary = FALSE)$person[, , "theta_Intercept"]
+  ranef(fit_2pl, summary = FALSE)$person[, , "theta_Intercept"] 
 
 person_sds_2pl <- apply(person_pars_2pl, 1, sd)
 
@@ -350,7 +590,10 @@ person_pars_2pl <- person_pars_2pl %>%
 	rownames_to_column(var = "person") %>%
   mutate(person = as.numeric(person))
 
-# plot person parameters
+saveRDS(person_pars_2pl, "results/person_pars_2pl")
+```
+
+```{r}
 person_pars_2pl %>%
   arrange(Estimate) %>%
   mutate(id2 = seq_len(n())) %>%
@@ -365,57 +608,26 @@ person_pars_2pl %>%
 ```
 
 ```{r}
-mirt_person_pars_2pl <- fscores(mirt_2pl, full.scores.SE = TRUE) %>%
-  as.data.frame() %>%
-  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
-  mutate(
-    Q2.5 = Estimate - 1.96 * Est.Error, 
-    Q97.5 = Estimate + 1.96 * Est.Error,
-    person = seq_len(n())
-  )
+person_fit_2pl <- fit_statistic(
+  fit_2pl, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_2pl <- person_fit_2pl %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_2pl <- which.max(person_diff_2pl$bp)
+person_fit_2pl %>% 
+  filter(person == person_max_2pl) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
 ```
-
-```{r}
-# plot comparison of person parameters
-person_pars_2pl_all <- person_pars_2pl %>% 
-  bind_cols(mirt_person_pars_2pl) %>%
-  mutate(
-    UIW = Q97.5 - Q2.5,
-    UIW1 = Q97.51 - Q2.51
-  )
-
-person_pars_2pl_all %>%
-	ggplot(aes(Estimate, Estimate1, color = UIW)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(-3, 2), y = c(-3, 2)) +
-	labs(
-		x = "Estimate (brms)",
-	  y = "Estimate (mirt)",
-		color = "UIW (brms)"
-	)
-
-person_pars_2pl_all %>%
-	ggplot(aes(UIW, UIW1, color = Estimate)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(1, 2.4), y = c(1, 2.4)) +
-	labs(
-		x = "UIW (brms)",
-	  y = "UIW (mirt)",
-		color = "Estimate (brms)"
-	)
-```
-
-#### Item Parameters
 
 ```{r, fig.height=4}
-# extract item parameters
 item_pars_2pl <- coef(fit_2pl, summary = FALSE)$item
 
-# plot item parameters
 # locations
 beta <- item_pars_2pl[, , "beta_Intercept"] %>%
   posterior_summary() %>%
@@ -435,12 +647,239 @@ item_pars_2pl <- bind_rows(beta, alpha, .id = "nlpar") %>%
 	mutate(item = as.numeric(item)) %>%
 	mutate(
 	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
-	  package = "brms"  
+	  method = "MCMC-H"  
 	)
+
+saveRDS(item_pars_2pl, "results/item_pars_2pl")
+```
+
+```{r}
+item_fit_2pl <- fit_statistic(
+  fit_2pl, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_2pl %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MCMC with non-hierarchical item priors
+
+```{r}
+formula_2pl_nh <- bf(
+  response2 ~ beta + exp(logalpha) * theta,
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
+  beta ~ 0 + item,
+  logalpha ~ 0 + item,
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_2pl_nh <- 
+  prior("normal(0, 5)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta")
+
+fit_2pl_nh <- brm(
+  formula = formula_2pl_nh,
+  data = spm_long,
+  prior = prior_2pl_nh,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_2pl_nh"
+)
+
+fit_2pl_nh <- add_loo(fit_2pl_nh)
+```
+
+```{r}
+summary(fit_2pl_nh)
+plot(fit_2pl_nh)
+```
+
+```{r}
+person_pars_2pl_nh <- 
+  ranef(fit_2pl_nh, summary = FALSE)$person[, , "theta_Intercept"] 
+
+person_sds_2pl_nh <- apply(person_pars_2pl_nh, 1, sd)
+
+person_pars_2pl_nh <- person_pars_2pl_nh %>%
+  sweep(1, person_sds_2pl_nh, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
+
+saveRDS(person_pars_2pl_nh, "results/person_pars_2pl_nh")
+```
+
+```{r}
+person_pars_2pl_nh %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+person_fit_2pl_nh <- fit_statistic(
+  fit_2pl_nh, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_2pl_nh <- person_fit_2pl_nh %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_2pl_nh <- which.max(person_diff_2pl_nh$bp)
+person_fit_2pl_nh %>% 
+  filter(person == person_max_2pl_nh) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
+```
+
+```{r}
+# extract item parameters
+item_pars_2pl_nh <- brms::fixef(fit_2pl_nh, summary = FALSE)
+
+# plot item parameters
+# locations
+sel_beta <- grepl("^beta", colnames(item_pars_2pl_nh))
+beta <- item_pars_2pl_nh[, sel_beta] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+sel_alpha <- grepl("^logalpha", colnames(item_pars_2pl_nh))
+alpha <- item_pars_2pl_nh[, sel_alpha] %>%
+  exp() %>%
+  sweep(1, person_sds_2pl_nh, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_2pl_nh <- bind_rows(beta, alpha, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  item = item - 0.1,
+	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
+	  method = "MCMC-NH"  
+	)
+
+saveRDS(item_pars_2pl_nh, "results/item_pars_2pl_nh")
+```
+
+```{r}
+item_fit_2pl_nh <- fit_statistic(
+  fit_2pl_nh, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_2pl_nh %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MAP
+
+```{r, results="hide"}
+parprior_2pl_map <- list(
+  c(seq(1, 45, 4), "lnorm", 0, 2),
+  c(seq(2, 46, 4), "norm", 0, 5)
+)
+
+fit_2pl_map <- mirt(
+  spm_wide, model = 1, 
+  itemtype = "2PL", SE = TRUE,
+  technical = list(NCYCLES = 10000), 
+  parprior = parprior_2pl_map
+)
+```
+
+```{r}
+person_pars_2pl_map <- fscores(fit_2pl_map, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 2pl model
+    scale = sd(Estimate) / sd(person_pars_2pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_2pl_map, "results/person_pars_2pl_map")
 ```
 
 ```{r, results="hide"}
-mirt_item_pars_2pl <- coef(mirt_2pl, as.data.frame = TRUE) %>%
+item_pars_2pl_map <- coef(fit_2pl_map, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.2,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1"),
+        labels = c("Location", "Slope")
+      ),
+    method = "MAP"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+
+saveRDS(item_pars_2pl_map, "results/item_pars_2pl_map")
+```
+
+### ML
+
+```{r, results="hide"}
+fit_2pl_ml <- mirt(spm_wide, model = 1, itemtype = "2PL", SE = TRUE,
+                   technical = list(NCYCLES = 10000))
+```
+
+```{r}
+person_pars_2pl_ml <- fscores(fit_2pl_ml, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 2pl model
+    scale = sd(Estimate) / sd(person_pars_2pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_2pl_ml, "results/person_pars_2pl_ml")
+```
+
+```{r, results="hide"}
+item_pars_2pl_ml <- coef(fit_2pl_ml, as.data.frame = TRUE) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   filter(str_detect(rowname, "\\.(a1|d)$")) %>%
@@ -455,27 +894,75 @@ mirt_item_pars_2pl <- coef(mirt_2pl, as.data.frame = TRUE) %>%
         levels = c("d", "a1"),
         labels = c("Location", "Slope")
       ),
-    package = "mirt"
+    method = "ML"
   ) %>%
   rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+
+saveRDS(item_pars_2pl_ml, "results/item_pars_2pl_ml")
 ```
 
+
+### Joint plots: Person parameters
+
 ```{r}
-# plot locations and slope next to each other
+# plot comparison of person parameters
+person_pars_2pl_all <- person_pars_2pl %>% 
+  bind_cols(person_pars_2pl_ml) %>%
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_2pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
+	labs(
+		x = "Estimate (MCMC-H)",
+	  y = "Estimate (ML)",
+		color = "UIW (MCMC-H)"
+	)
+
+person_pars_2pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
+	labs(
+		x = "UIW (MCMC-H)",
+	  y = "UIW (ML)",
+		color = "Estimate (MCMC-H)"
+	)
+```
+
+### Joint plots: Item parameters
+  
+```{r}
 item_pars_2pl %>%
-  bind_rows(mirt_item_pars_2pl) %>%
-	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  bind_rows(
+    item_pars_2pl_nh,
+    item_pars_2pl_map, 
+    item_pars_2pl_ml
+  ) %>%
+  mutate(
+    method = factor(method, levels = c("MCMC-H", "MCMC-NH", "MAP", "ML"))
+  ) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = method)) +
   scale_x_continuous(breaks = 1:12) +
-	facet_wrap("nlpar", scales = "free_x") +
-  geom_pointrange() +
-  scale_color_manual(name = "Package", values = c("black", "grey")) +
+	geom_pointrange() +
+  facet_wrap("nlpar", scales = "free_x") +
+  scale_color_viridis_d(name = "Method") +
 	coord_flip() +
 	labs(x = "Item Number")
 ```
 
-### 3PL models with fixed guessing probability {.tabset}
 
-#### Model Fitting
+## 3PL models with fixed guessing probability {.tabset}
+
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_3pl_fixed <- bf(
@@ -484,7 +971,7 @@ formula_3pl_fixed <- bf(
   theta ~ 0 + (1 | person),
   beta ~ 1 + (1 |i| item),
   logalpha ~ 1 + (1 |i| item),
-  family = brmsfamily("bernoulli", link = "identity")
+  family = brmsfamily("bernoulli", link = "logit")
 )
 
 prior_3pl_fixed <- 
@@ -508,21 +995,12 @@ fit_3pl_fixed <- add_loo(fit_3pl_fixed)
 
 ```{r}
 summary(fit_3pl_fixed)
+plot(fit_3pl_fixed)
 ```
 
 ```{r}
-mirt_3pl_fixed <- mirt(
-  spm_wide, model = 1, itemtype = "2PL", guess = 0.11, 
-  SE = TRUE, technical = list(NCYCLES = 10000)
-)
-```
-
-#### Person Parameters
-
-```{r}
-# extract and scale person parameters
 person_pars_3pl_fixed <- 
-  ranef(fit_3pl_fixed, summary = FALSE)$person[, , "theta_Intercept"]
+  ranef(fit_3pl_fixed, summary = FALSE)$person[, , "theta_Intercept"] 
 
 person_sds_3pl_fixed <- apply(person_pars_3pl_fixed, 1, sd)
 
@@ -533,7 +1011,10 @@ person_pars_3pl_fixed <- person_pars_3pl_fixed %>%
 	rownames_to_column(var = "person") %>%
   mutate(person = as.numeric(person))
 
-# plot person parameters
+saveRDS(person_pars_3pl_fixed, "results/person_pars_3pl_fixed") 
+```
+
+```{r}
 person_pars_3pl_fixed %>%
   arrange(Estimate) %>%
   mutate(id2 = seq_len(n())) %>%
@@ -548,62 +1029,31 @@ person_pars_3pl_fixed %>%
 ```
 
 ```{r}
-mirt_person_pars_3pl_fixed <- 
-  fscores(mirt_3pl_fixed, full.scores.SE = TRUE) %>%
-  as.data.frame() %>%
-  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
-  mutate(
-    Q2.5 = Estimate - 1.96 * Est.Error, 
-    Q97.5 = Estimate + 1.96 * Est.Error,
-    person = seq_len(n())
-  )
+person_fit_3pl_fixed <- fit_statistic(
+  fit_3pl_fixed, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_3pl_fixed <- person_fit_3pl_fixed %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_3pl_fixed <- which.max(person_diff_3pl_fixed$bp)
+person_fit_3pl_fixed %>% 
+  filter(person == person_max_3pl_fixed) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
 ```
-
-```{r}
-# plot comparison of person parameters
-person_pars_3pl_fixed_all <- person_pars_3pl_fixed %>% 
-  bind_cols(mirt_person_pars_3pl_fixed) %>%
-  mutate(
-    UIW = Q97.5 - Q2.5,
-    UIW1 = Q97.51 - Q2.51
-  )
-
-person_pars_3pl_fixed_all %>%
-	ggplot(aes(Estimate, Estimate1, color = UIW)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(-3, 2), y = c(-3, 2)) +
-	labs(
-		x = "Estimate (brms)",
-	  y = "Estimate (mirt)",
-		color = "UIW (brms)"
-	)
-
-person_pars_3pl_fixed_all %>%
-	ggplot(aes(UIW, UIW1, color = Estimate)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(1, 2.4), y = c(1, 2.4)) +
-	labs(
-		x = "UIW (brms)",
-	  y = "UIW (mirt)",
-		color = "Estimate (brms)"
-	)
-```
-
-#### Item Parameters
 
 ```{r, fig.height=4}
-# extract item parameters
 item_pars_3pl_fixed <- coef(fit_3pl_fixed, summary = FALSE)$item
 
 # locations
 beta <- item_pars_3pl_fixed[, , "beta_Intercept"] %>%
   posterior_summary() %>%
 	as_tibble() %>%
-	rownames_to_column()
+	rownames_to_column() 
 
 # slopes
 alpha <- item_pars_3pl_fixed[, , "logalpha_Intercept"] %>%
@@ -618,12 +1068,239 @@ item_pars_3pl_fixed <- bind_rows(beta, alpha, .id = "nlpar") %>%
 	mutate(item = as.numeric(item)) %>%
 	mutate(
 	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
-	  package = "brms"  
+	  method = "MCMC-H"  
 	)
+
+saveRDS(item_pars_3pl_fixed, "results/item_pars_3pl_fixed")
+```
+
+```{r}
+item_fit_3pl_fixed <- fit_statistic(
+  fit_3pl_fixed, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_3pl_fixed %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MCMC with non-hierarchical item priors
+
+```{r}
+formula_3pl_fixed_nh <- bf(
+  response2 ~ 0.125 + 0.875 * inv_logit(beta + exp(logalpha) * theta),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
+  beta ~ 0 + item,
+  logalpha ~ 0 + item,
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_3pl_fixed_nh <- 
+  prior("normal(0, 5)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta")
+
+fit_3pl_fixed_nh <- brm(
+  formula = formula_3pl_fixed_nh,
+  data = spm_long,
+  prior = prior_3pl_fixed_nh,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_3pl_fixed_nh"
+)
+
+fit_3pl_fixed_nh <- add_loo(fit_3pl_fixed_nh) 
+```
+
+```{r}
+summary(fit_3pl_fixed_nh)
+```
+
+```{r}
+person_pars_3pl_fixed_nh <- 
+  ranef(fit_3pl_fixed_nh, summary = FALSE)$person[, , "theta_Intercept"] 
+
+person_sds_3pl_fixed_nh <- apply(person_pars_3pl_fixed_nh, 1, sd)
+
+person_pars_3pl_fixed_nh <- person_pars_3pl_fixed_nh %>%
+  sweep(1, person_sds_3pl_fixed_nh, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person)) 
+
+saveRDS(person_pars_3pl_fixed_nh, "results/person_pars_3pl_fixed_nh")
+```
+
+```{r}
+person_pars_3pl_fixed_nh %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) 
+```
+
+```{r}
+person_fit_3pl_fixed_nh <- fit_statistic(
+  fit_3pl_fixed_nh, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_3pl_fixed_nh <- person_fit_3pl_fixed_nh %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_3pl_fixed_nh <- which.max(person_diff_3pl_fixed_nh$bp)
+person_fit_3pl_fixed_nh %>% 
+  filter(person == person_max_3pl_fixed_nh) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist() 
+```
+
+```{r}
+# extract item parameters
+item_pars_3pl_fixed_nh <- brms::fixef(fit_3pl_fixed_nh, summary = FALSE)
+
+# plot item parameters
+# locations
+sel_beta <- grepl("^beta", colnames(item_pars_3pl_fixed_nh))
+beta <- item_pars_3pl_fixed_nh[, sel_beta] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column() 
+
+# slopes
+sel_alpha <- grepl("^logalpha", colnames(item_pars_3pl_fixed_nh))
+alpha <- item_pars_3pl_fixed_nh[, sel_alpha] %>%
+  exp() %>%
+  sweep(1, person_sds_3pl_fixed_nh, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_3pl_fixed_nh <- bind_rows(beta, alpha, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  item = item - 0.1,
+	  nlpar = factor(nlpar, labels = c("Location", "Slope")),
+	  method = "MCMC-NH"  
+	)
+
+saveRDS(item_pars_3pl_fixed_nh, "results/item_pars_3pl_fixed_nh") 
+```
+
+```{r}
+item_fit_3pl_fixed_nh <- fit_statistic(
+  fit_3pl_fixed_nh, criterion = ll, group = item,
+  nsamples = 1000
+)
+ 
+item_fit_3pl_fixed_nh %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MAP
+
+```{r, results="hide"}
+parprior_3pl_fixed_map <- list(
+  c(seq(1, 45, 4), "lnorm", 0, 2),
+  c(seq(2, 46, 4), "norm", 0, 5)
+)
+
+fit_3pl_fixed_map <- mirt(
+  spm_wide, model = 1, 
+  itemtype = "2PL", guess = 0.11, 
+  SE = TRUE, technical = list(NCYCLES = 10000), 
+  parprior = parprior_3pl_fixed_map
+)
+```
+
+```{r}
+person_pars_3pl_fixed_map <- fscores(fit_3pl_fixed_map, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 3pl_fixed model
+    scale = sd(Estimate) / sd(person_pars_3pl_fixed$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_3pl_fixed_map, "results/person_pars_3pl_fixed_map")
 ```
 
 ```{r, results="hide"}
-mirt_item_pars_3pl_fixed <- coef(mirt_3pl_fixed, as.data.frame = TRUE) %>%
+item_pars_3pl_fixed_map <- coef(fit_3pl_fixed_map, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.2,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1"),
+        labels = c("Location", "Slope")
+      ),
+    method = "MAP"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+
+saveRDS(item_pars_3pl_fixed_map, "results/item_pars_3pl_fixed_map")
+```
+
+### ML
+
+```{r, results="hide"}
+fit_3pl_fixed_ml <- mirt(
+  spm_wide, model = 1, itemtype = "2PL", guess = 0.11, 
+  SE = TRUE, technical = list(NCYCLES = 10000))
+```
+
+```{r}
+person_pars_3pl_fixed_ml <- fscores(fit_3pl_fixed_ml, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 3pl_fixed model
+    scale = sd(Estimate) / sd(person_pars_3pl_fixed$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_3pl_fixed_ml, "results/person_pars_3pl_fixed_ml")
+```
+
+```{r, results="hide"}
+item_pars_3pl_fixed_ml <- coef(fit_3pl_fixed_ml, as.data.frame = TRUE) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   filter(str_detect(rowname, "\\.(a1|d)$")) %>%
@@ -638,27 +1315,75 @@ mirt_item_pars_3pl_fixed <- coef(mirt_3pl_fixed, as.data.frame = TRUE) %>%
         levels = c("d", "a1"),
         labels = c("Location", "Slope")
       ),
-    package = "mirt"
+    method = "ML"
   ) %>%
   rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+
+saveRDS(item_pars_3pl_fixed_ml, "results/item_pars_3pl_fixed_ml")
 ```
 
+
+### Joint plots: Person parameters
+
 ```{r}
-# plot locations and slope next to each other
+# plot comparison of person parameters
+person_pars_3pl_fixed_all <- person_pars_3pl_fixed %>% 
+  bind_cols(person_pars_3pl_fixed_ml) %>%
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_3pl_fixed_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
+	labs(
+		x = "Estimate (MCMC-H)",
+	  y = "Estimate (ML)",
+		color = "UIW (MCMC-H)"
+	)
+
+person_pars_3pl_fixed_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
+	labs(
+		x = "UIW (MCMC-H)",
+	  y = "UIW (ML)",
+		color = "Estimate (MCMC-H)"
+	)
+```
+
+### Joint plots: Item parameters
+  
+```{r}
 item_pars_3pl_fixed %>%
-  bind_rows(mirt_item_pars_3pl_fixed) %>%
-	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  bind_rows(
+    item_pars_3pl_fixed_nh,
+    item_pars_3pl_fixed_map, 
+    item_pars_3pl_fixed_ml
+  ) %>%
+  mutate(
+    method = factor(method, levels = c("MCMC-H", "MCMC-NH", "MAP", "ML"))
+  ) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = method)) +
   scale_x_continuous(breaks = 1:12) +
-	facet_wrap("nlpar", scales = "free_x") +
 	geom_pointrange() +
-	scale_color_manual(name = "Package", values = c("black", "grey")) +
+  facet_wrap("nlpar", scales = "free_x") +
+  scale_color_viridis_d(name = "Method") +
 	coord_flip() +
 	labs(x = "Item Number")
 ```
 
-### 3PL models {.tabset}
 
-#### Model Fitting
+## 3PL Models {.tabset}
+
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_3pl <- bf(
@@ -696,19 +1421,12 @@ fit_3pl <- add_loo(fit_3pl)
 
 ```{r}
 summary(fit_3pl)
+plot(fit_3pl)
 ```
-
-```{r, results = "hide"}
-mirt_3pl <- mirt(spm_wide, model = 1, itemtype = "3PL", SE = TRUE,
-                 technical = list(NCYCLES = 10000))
-```
-
-#### Person Parameters
 
 ```{r}
-# extract and scale person parameters
 person_pars_3pl <- 
-  ranef(fit_3pl, summary = FALSE)$person[, , "theta_Intercept"]
+  ranef(fit_3pl, summary = FALSE)$person[, , "theta_Intercept"] 
 
 person_sds_3pl <- apply(person_pars_3pl, 1, sd)
 
@@ -719,7 +1437,10 @@ person_pars_3pl <- person_pars_3pl %>%
 	rownames_to_column(var = "person") %>%
   mutate(person = as.numeric(person))
 
-# plot person parameters
+saveRDS(person_pars_3pl, "results/person_pars_3pl")
+```
+
+```{r}
 person_pars_3pl %>%
   arrange(Estimate) %>%
   mutate(id2 = seq_len(n())) %>%
@@ -734,53 +1455,24 @@ person_pars_3pl %>%
 ```
 
 ```{r}
-mirt_person_pars_3pl <- fscores(mirt_3pl, full.scores.SE = TRUE) %>%
-  as.data.frame() %>%
-  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
-  mutate(
-    Q2.5 = Estimate - 1.96 * Est.Error, 
-    Q97.5 = Estimate + 1.96 * Est.Error,
-    person = seq_len(n())
-  )
+person_fit_3pl <- fit_statistic(
+  fit_3pl, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_3pl <- person_fit_3pl %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_3pl <- which.max(person_diff_3pl$bp)
+person_fit_3pl %>% 
+  filter(person == person_max_3pl) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
 ```
 
 ```{r}
-# plot comparison of person parameters
-person_pars_3pl_all <- person_pars_3pl %>% 
-  bind_cols(mirt_person_pars_3pl) %>%
-  mutate(
-    UIW = Q97.5 - Q2.5,
-    UIW1 = Q97.51 - Q2.51
-  )
-
-person_pars_3pl_all %>%
-	ggplot(aes(Estimate, Estimate1, color = UIW)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(-3, 2), y = c(-3, 2)) +
-	labs(
-		x = "Estimate (brms)",
-	  y = "Estimate (mirt)",
-		color = "UIW (brms)"
-	)
-
-person_pars_3pl_all %>%
-	ggplot(aes(UIW, UIW1, color = Estimate)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(1, 2.4), y = c(1, 2.4)) +
-	labs(
-		x = "UIW (brms)",
-	  y = "UIW (mirt)",
-		color = "Estimate (brms)"
-	)
-```
-
-#### Item Parameters
-
-```{r, fig.height=4}
 # extract item parameters
 item_pars_3pl <- coef(fit_3pl, summary = FALSE)$item
 
@@ -811,12 +1503,252 @@ item_pars_3pl <- bind_rows(beta, alpha, gamma, .id = "nlpar") %>%
 	mutate(item = as.numeric(item)) %>%
 	mutate(
 	  nlpar = factor(nlpar, labels = c("Location", "Slope", "Guessing")),
-	  package = "brms"  
+	  method = "MCMC-H"  
 	)
+
+saveRDS(item_pars_3pl, "results/item_pars_3pl")
+```
+
+```{r}
+item_fit_3pl <- fit_statistic(
+  fit_3pl, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_3pl %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MCMC with non-hierarchical item priors
+
+```{r}
+formula_3pl_nh <- bf(
+  response2 ~ gamma + (1 - gamma) * 
+    inv_logit(beta + exp(logalpha) * theta),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
+  beta ~ 0 + item,
+  logalpha ~ 0 + item,
+  logitgamma ~ 0 + item,
+  nlf(gamma ~ inv_logit(logitgamma)),
+  family = brmsfamily("bernoulli", link = "identity")
+)
+
+prior_3pl_nh <- 
+  prior("normal(0, 5)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(-2, 1)", class = "b", nlpar = "logitgamma") +
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta")
+
+fit_3pl_nh <- brm(
+  formula = formula_3pl_nh,
+  data = spm_long,
+  prior = prior_3pl_nh,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_3pl_nh"
+)
+
+fit_3pl_nh <- add_loo(fit_3pl_nh)
+```
+
+```{r}
+summary(fit_3pl_nh)
+plot(fit_3pl_nh)
+```
+
+```{r}
+person_pars_3pl_nh <- 
+  ranef(fit_3pl_nh, summary = FALSE)$person[, , "theta_Intercept"] 
+
+person_sds_3pl_nh <- apply(person_pars_3pl_nh, 1, sd)
+
+person_pars_3pl_nh <- person_pars_3pl_nh %>%
+  sweep(1, person_sds_3pl_nh, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
+
+saveRDS(person_pars_3pl_nh, "results/person_pars_3pl_nh")
+```
+
+```{r}
+person_pars_3pl_nh %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+person_fit_3pl_nh <- fit_statistic(
+  fit_3pl_nh, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_3pl_nh <- person_fit_3pl_nh %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_3pl_nh <- which.max(person_diff_3pl_nh$bp)
+person_fit_3pl_nh %>% 
+  filter(person == person_max_3pl_nh) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
+```
+
+```{r}
+# extract item parameters
+item_pars_3pl_nh <- brms::fixef(fit_3pl_nh, summary = FALSE)
+
+# plot item parameters
+# locations
+sel_beta <- grepl("^beta", colnames(item_pars_3pl_nh))
+beta <- item_pars_3pl_nh[, sel_beta] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+sel_alpha <- grepl("^logalpha", colnames(item_pars_3pl_nh))
+alpha <- item_pars_3pl_nh[, sel_alpha] %>%
+	exp() %>%
+  sweep(1, person_sds_3pl_nh, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# guessing parameters
+sel_gamma <- grepl("^logitgamma", colnames(item_pars_3pl_nh))
+gamma <- item_pars_3pl_nh[, sel_gamma] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_3pl_nh <- bind_rows(beta, alpha, gamma, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  item = item - 0.1,
+	  nlpar = factor(nlpar, labels = c("Location", "Slope", "Guessing")),
+	  method = "MCMC-NH"  
+	)
+
+saveRDS(item_pars_3pl_nh, "results/item_pars_3pl_nh")
+```
+
+```{r}
+item_fit_3pl_nh <- fit_statistic(
+  fit_3pl_nh, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_3pl_nh %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MAP
+
+```{r, results="hide"}
+parprior_3pl_map <- list(
+  c(seq(1, 45, 4), "lnorm", 0, 2),
+  c(seq(2, 46, 4), "norm", 0, 5),
+  c(seq(3, 47, 4), "norm", -2, 1)
+)
+
+fit_3pl_map <- mirt(
+  spm_wide, model = 1, 
+  itemtype = "3PL", SE = TRUE,
+  technical = list(NCYCLES = 10000), 
+  parprior = parprior_3pl_map
+)
+```
+
+```{r}
+person_pars_3pl_map <- fscores(fit_3pl_map, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 3pl model
+    scale = sd(Estimate) / sd(person_pars_3pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_3pl_map, "results/person_pars_3pl_map")
 ```
 
 ```{r, results="hide"}
-mirt_item_pars_3pl <- coef(mirt_3pl, as.data.frame = TRUE) %>%
+item_pars_3pl_map <- coef(fit_3pl_map, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d|g)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.2,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1", "g"),
+        labels = c("Location", "Slope", "Guessing")
+      ),
+    method = "MAP"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+
+saveRDS(item_pars_3pl_map, "results/item_pars_3pl_map")
+```
+
+### ML
+
+```{r, results="hide"}
+fit_3pl_ml <- mirt(spm_wide, model = 1, itemtype = "3PL", SE = TRUE,
+                   technical = list(NCYCLES = 10000))
+```
+
+```{r}
+person_pars_3pl_ml <- fscores(fit_3pl_ml, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 3pl model
+    scale = sd(Estimate) / sd(person_pars_3pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_3pl_ml, "results/person_pars_3pl_ml")
+```
+
+```{r, results="hide"}
+item_pars_3pl_ml <- coef(fit_3pl_ml, as.data.frame = TRUE) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   filter(str_detect(rowname, "\\.(a1|d|g)$")) %>%
@@ -831,26 +1763,75 @@ mirt_item_pars_3pl <- coef(mirt_3pl, as.data.frame = TRUE) %>%
         levels = c("d", "a1", "g"),
         labels = c("Location", "Slope", "Guessing")
       ),
-    package = "mirt"
+    method = "ML"
   ) %>%
-  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5) 
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+
+saveRDS(item_pars_3pl_ml, "results/item_pars_3pl_ml")
 ```
 
+
+### Joint plots: Person parameters
+
+```{r}
+# plot comparison of person parameters
+person_pars_3pl_all <- person_pars_3pl %>% 
+  bind_cols(person_pars_3pl_ml) %>%
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_3pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
+	labs(
+		x = "Estimate (MCMC-H)",
+	  y = "Estimate (ML)",
+		color = "UIW (MCMC-H)"
+	)
+
+person_pars_3pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
+	labs(
+		x = "UIW (MCMC-H)",
+	  y = "UIW (ML)",
+		color = "Estimate (MCMC-H)"
+	)
+```
+
+### Joint plots: Item parameters
+  
 ```{r}
 item_pars_3pl %>%
-  bind_rows(mirt_item_pars_3pl) %>%
-  ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  bind_rows(
+    item_pars_3pl_nh,
+    item_pars_3pl_map, 
+    item_pars_3pl_ml
+  ) %>%
+  mutate(
+    method = factor(method, levels = c("MCMC-H", "MCMC-NH", "MAP", "ML"))
+  ) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = method)) +
   scale_x_continuous(breaks = 1:12) +
-	facet_wrap("nlpar", scales = "free_x") +
 	geom_pointrange() +
-  scale_color_manual(name = "Package", values = c("black", "grey")) +
+  facet_wrap("nlpar", scales = "free_x") +
+  scale_color_viridis_d(name = "Method") +
 	coord_flip() +
 	labs(x = "Item Number")
 ```
 
-### 4PL models {.tabset}
 
-#### Model Fitting
+## 4PL Models {.tabset}
+
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_4pl <- bf(
@@ -886,26 +1867,18 @@ fit_4pl <- brm(
   cores = cores, control = control, inits = 0,
   file = "models/fit_4pl"
 )
-fit_4pl <- add_loo(fit_4pl)
+
+fit_4pl <- add_loo(fit_4pl) 
 ```
 
 ```{r}
 summary(fit_4pl)
+plot(fit_4pl)
 ```
-
-```{r, results="hide"}
-mirt_4pl <- mirt(
-  spm_wide, model = 1, itemtype = "4PL", SE = TRUE,
-  technical = list(NCYCLES = 10000)
-)
-```
-
-#### Person Parameters
 
 ```{r}
-# extract and scale person parameters
 person_pars_4pl <- 
-  ranef(fit_4pl, summary = FALSE)$person[, , "theta_Intercept"]
+  ranef(fit_4pl, summary = FALSE)$person[, , "theta_Intercept"] 
 
 person_sds_4pl <- apply(person_pars_4pl, 1, sd)
 
@@ -916,7 +1889,10 @@ person_pars_4pl <- person_pars_4pl %>%
 	rownames_to_column(var = "person") %>%
   mutate(person = as.numeric(person))
 
-# plot person parameters
+saveRDS(person_pars_4pl, "results/person_pars_4pl")
+```
+
+```{r}
 person_pars_4pl %>%
   arrange(Estimate) %>%
   mutate(id2 = seq_len(n())) %>%
@@ -931,51 +1907,22 @@ person_pars_4pl %>%
 ```
 
 ```{r}
-mirt_person_pars_4pl <- fscores(mirt_4pl, full.scores.SE = TRUE) %>%
-  as.data.frame() %>%
-  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
-  mutate(
-    Q2.5 = Estimate - 1.96 * Est.Error, 
-    Q97.5 = Estimate + 1.96 * Est.Error,
-    person = seq_len(n())
-  )
+person_fit_4pl <- fit_statistic(
+  fit_4pl, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_4pl <- person_fit_4pl %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_4pl <- which.max(person_diff_4pl$bp)
+person_fit_4pl %>% 
+  filter(person == person_max_4pl) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
 ```
-
-```{r}
-# plot comparison of person parameters
-person_pars_4pl_all <- person_pars_4pl %>% 
-  bind_cols(mirt_person_pars_4pl) %>%
-  mutate(
-    UIW = Q97.5 - Q2.5,
-    UIW1 = Q97.51 - Q2.51
-  )
-
-person_pars_4pl_all %>%
-	ggplot(aes(Estimate, Estimate1, color = UIW)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(-3, 2), y = c(-3, 2)) +
-	labs(
-		x = "Estimate (brms)",
-	  y = "Estimate (mirt)",
-		color = "UIW (brms)"
-	)
-
-person_pars_4pl_all %>%
-	ggplot(aes(UIW, UIW1, color = Estimate)) +
-	geom_point() +
-	geom_abline() +
-	scale_color_viridis_c() +
-	lims(x = c(1, 2.4), y = c(1, 2.4)) +
-	labs(
-		x = "UIW (brms)",
-	  y = "UIW (mirt)",
-		color = "Estimate (brms)"
-	)
-```
-
-#### Item Parameters
 
 ```{r}
 # extract item parameters
@@ -1015,12 +1962,271 @@ item_pars_4pl <- bind_rows(beta, alpha, gamma, psi, .id = "nlpar") %>%
 	mutate(
 	  nlpar = nlpar %>% 
 	    factor(labels = c("Location", "Slope", "Guessing", "Lapse")),
-	  package = "brms"
+	  method = "MCMC-H"
 	)
+
+saveRDS(item_pars_4pl, "results/item_pars_4pl")
+```
+
+```{r}
+item_fit_4pl <- fit_statistic(
+  fit_4pl, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_4pl %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MCMC with non-hierarchical item priors
+
+```{r}
+formula_4pl_nh <- bf(
+  response2 ~ gamma + (1 - gamma - psi) * 
+    inv_logit(beta + exp(logalpha) * theta),
+  nl = TRUE,
+  theta ~ 0 + (1 | person),
+  beta ~ 0 + item,
+  logalpha ~ 0 + item,
+  logitgamma ~ 0 + item,
+  nlf(gamma ~ inv_logit(logitgamma)),
+  logitpsi ~ 0 + item,
+  nlf(psi ~ inv_logit(logitpsi)),
+  family = brmsfamily("bernoulli", link = "identity")
+)
+
+prior_4pl_nh <- 
+  prior("normal(0, 5)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "logalpha") +
+  prior("normal(-2, 1)", class = "b", nlpar = "logitgamma") +
+  prior("normal(-2, 1)", class = "b", nlpar = "logitpsi") +
+  prior("normal(0, 1)", class = "sd", group = "person", nlpar = "theta")
+
+fit_4pl_nh <- brm(
+  formula = formula_4pl_nh,
+  data = spm_long,
+  prior = prior_4pl_nh,
+  chains = cores, iter = iter, warmup = warmup,
+  cores = cores, control = control, inits = 0,
+  file = "models/fit_4pl_nh"
+)
+
+fit_4pl_nh <- add_loo(fit_4pl_nh) 
+```
+
+```{r}
+summary(fit_4pl_nh)
+plot(fit_4pl_nh)
+```
+
+```{r}
+person_pars_4pl_nh <- 
+  ranef(fit_4pl_nh, summary = FALSE)$person[, , "theta_Intercept"] 
+
+person_sds_4pl_nh <- apply(person_pars_4pl_nh, 1, sd)
+
+person_pars_4pl_nh <- person_pars_4pl_nh %>%
+  sweep(1, person_sds_4pl_nh, "/") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column(var = "person") %>%
+  mutate(person = as.numeric(person))
+
+saveRDS(person_pars_4pl_nh, "results/person_pars_4pl_nh")
+```
+
+```{r}
+person_pars_4pl_nh %>%
+  arrange(Estimate) %>%
+  mutate(id2 = seq_len(n())) %>%
+	ggplot(aes(id2, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+	geom_pointrange(alpha = 0.7) +
+	coord_flip() +
+	labs(x = "Person Number (sorted after Estimate)") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+person_fit_4pl_nh <- fit_statistic(
+  fit_4pl_nh, criterion = ll, group = person,
+  nsamples = 1000
+)
+
+person_diff_4pl_nh <- person_fit_4pl_nh %>%
+  group_by(person) %>%
+  summarise(bp = mean(crit_diff > 0))
+
+person_max_4pl_nh <- which.max(person_diff_4pl_nh$bp)
+person_fit_4pl_nh %>% 
+  filter(person == person_max_4pl_nh) %>%
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  theme_hist()
+```
+
+```{r}
+# extract item parameters
+item_pars_4pl_nh <- brms::fixef(fit_4pl_nh, summary = FALSE)
+
+# plot item parameters
+# locations
+sel_beta <- grepl("^beta", colnames(item_pars_4pl_nh))
+beta <- item_pars_4pl_nh[, sel_beta] %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# slopes
+sel_alpha <- grepl("^logalpha", colnames(item_pars_4pl_nh))
+alpha <- item_pars_4pl_nh[, sel_alpha] %>%
+	exp() %>%
+  sweep(1, person_sds_4pl_nh, "*") %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# guessing parameters
+sel_gamma <- grepl("^logitgamma", colnames(item_pars_4pl_nh))
+gamma <- item_pars_4pl_nh[, sel_gamma] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+# lapse parameters
+sel_psi <- grepl("^logitpsi", colnames(item_pars_4pl_nh))
+psi <- item_pars_4pl_nh[, sel_psi] %>%
+	inv_logit_scaled() %>%
+  posterior_summary() %>%
+	as_tibble() %>%
+	rownames_to_column()
+
+item_pars_4pl_nh <- bind_rows(beta, alpha, gamma, psi, .id = "nlpar") %>%
+	rename(item = "rowname") %>%
+	mutate(
+	  item = as.numeric(item),
+	  item = item - 0.1,
+	  nlpar = nlpar %>% 
+	    factor(labels = c("Location", "Slope", "Guessing", "Lapse")),
+	  method = "MCMC-NH"
+	) 
+
+saveRDS(item_pars_4pl_nh, "results/item_pars_4pl_nh")
+```
+
+```{r}
+item_fit_4pl_nh <- fit_statistic(
+  fit_4pl_nh, criterion = ll, group = item,
+  nsamples = 1000
+)
+
+item_fit_4pl_nh %>% 
+  ggplot(aes(crit_diff)) +
+  geom_histogram() +
+  facet_wrap("item", scales = "free") +
+  theme_hist()
+```
+
+
+### MAP
+
+```{r, results="hide"}
+parprior_4pl_map <- list(
+  c(seq(1, 45, 4), "lnorm", 0, 2),
+  c(seq(2, 46, 4), "norm", 0, 5),
+  c(seq(3, 47, 4), "norm", -2, 1),
+  c(seq(4, 48, 4), "norm", 2, 1)
+)
+
+fit_4pl_map <- mirt(
+  spm_wide, model = 1, 
+  itemtype = "4PL", SE = TRUE,
+  technical = list(NCYCLES = 10000), 
+  parprior = parprior_4pl_map
+)
+```
+
+```{r}
+person_pars_4pl_map <- fscores(fit_4pl_map, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 4pl model
+    scale = sd(Estimate) / sd(person_pars_4pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_4pl_map, "results/person_pars_4pl_map")
 ```
 
 ```{r, results="hide"}
-mirt_item_pars_4pl <- coef(mirt_4pl, as.data.frame = TRUE) %>%
+item_pars_4pl_map <- coef(fit_4pl_map, as.data.frame = TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  filter(str_detect(rowname, "\\.(a1|d|g|u)$")) %>%
+  mutate(
+    item = str_match(rowname, "^X[[:digit:]]+") %>%
+      str_remove("^X") %>%
+      as.numeric(),
+    item = item - 0.2,
+    nlpar = str_match(rowname, "\\.[^\\.]+$") %>%
+      str_remove("^\\.") %>%
+      factor(
+        levels = c("d", "a1", "g", "u"),
+        labels = c("Location", "Slope", "Guessing", "Lapse")
+      ),
+    # invert guessing parameter
+    par = ifelse(nlpar == "Lapse", 1 - par, par),
+    CI_2.5 = ifelse(nlpar == "Lapse", 1 - CI_2.5, CI_2.5),
+    CI_97.5 = ifelse(nlpar == "Lapse", 1 - CI_97.5, CI_97.5),
+    method = "MAP"
+  ) %>%
+  rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+
+saveRDS(item_pars_4pl_map, "results/item_pars_4pl_map")
+```
+
+### ML
+
+```{r, results="hide"}
+fit_4pl_ml <- mirt(
+  spm_wide, model = 1, itemtype = "4PL", SE = TRUE,
+  technical = list(NCYCLES = 10000)
+)
+```
+
+```{r}
+person_pars_4pl_ml <- fscores(fit_4pl_ml, full.scores.SE = TRUE) %>%
+  as.data.frame() %>%
+  rename(Estimate = "F1", Est.Error = "SE_F1") %>%
+  mutate(
+    # person parameters are not scaled appropriately by mirt for the 4pl model
+    scale = sd(Estimate) / sd(person_pars_4pl$Estimate),
+    Estimate = Estimate / scale,
+    Est.Error = Est.Error / scale,
+    Q2.5 = Estimate - 1.96 * Est.Error, 
+    Q97.5 = Estimate + 1.96 * Est.Error,
+    person = seq_len(n())
+  ) %>%
+  select(-scale)
+
+saveRDS(person_pars_4pl_ml, "results/person_pars_4pl_ml")
+```
+
+```{r, results="hide"}
+item_pars_4pl_ml <- coef(fit_4pl_ml, as.data.frame = TRUE) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   filter(str_detect(rowname, "\\.(a1|d|g|u)$")) %>%
@@ -1037,48 +2243,100 @@ mirt_item_pars_4pl <- coef(mirt_4pl, as.data.frame = TRUE) %>%
       ),
     # invert guessing parameter
     par = ifelse(nlpar == "Lapse", 1 - par, par),
-    # cannot compute CIs as inverting the information matrix fails
+    # inverting the information matrix fails
     CI_2.5 = par,
     CI_97.5 = par,
-    package = "mirt"
+    method = "ML"
   ) %>%
   rename(Estimate = par, Q2.5 = CI_2.5, Q97.5 = CI_97.5)
+
+saveRDS(item_pars_4pl_ml, "results/item_pars_4pl_ml")
 ```
 
-```{r, fig.height=8}
+
+### Joint plots: Person parameters
+
+```{r}
+# plot comparison of person parameters
+person_pars_4pl_all <- person_pars_4pl %>% 
+  bind_cols(person_pars_4pl_ml) %>%
+  mutate(
+    UIW = Q97.5 - Q2.5,
+    UIW1 = Q97.51 - Q2.51
+  )
+
+person_pars_4pl_all %>%
+	ggplot(aes(Estimate, Estimate1, color = UIW)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(-3, 2), y = c(-3, 2)) +
+	labs(
+		x = "Estimate (MCMC-H)",
+	  y = "Estimate (ML)",
+		color = "UIW (MCMC-H)"
+	)
+
+person_pars_4pl_all %>%
+	ggplot(aes(UIW, UIW1, color = Estimate)) +
+	geom_point() +
+	geom_abline() +
+	scale_color_viridis_c() +
+	lims(x = c(1, 2.4), y = c(1, 2.4)) +
+	labs(
+		x = "UIW (MCMC-H)",
+	  y = "UIW (ML)",
+		color = "Estimate (MCMC-H)"
+	)
+```
+
+### Joint plots: Item parameters
+  
+```{r}
 item_pars_4pl %>%
-  bind_rows(mirt_item_pars_4pl) %>%
-	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = package)) +
+  bind_rows(
+    item_pars_4pl_nh,
+    item_pars_4pl_map, 
+    item_pars_4pl_ml
+  ) %>%
+  mutate(
+    method = factor(method, levels = c("MCMC-H", "MCMC-NH", "MAP", "ML"))
+  ) %>%
+	ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5, color = method)) +
   scale_x_continuous(breaks = 1:12) +
-	facet_wrap("nlpar", scales = "free_x") +
 	geom_pointrange() +
-  scale_color_manual(name = "Package", values = c("black", "grey")) +
+  facet_wrap("nlpar", scales = "free_x") +
+  scale_color_viridis_d(name = "Method") +
 	coord_flip() +
 	labs(x = "Item Number")
 ```
 
-### Comparison of models
 
-#### Out-Of-Sample Predictive Performance
+
+## Comparison of models
+
+### Out-Of-Sample Predictive Performance
 
 ```{r}
 loo_compare(fit_1pl, fit_2pl, fit_3pl_fixed, fit_3pl, fit_4pl)
 ```
 
-#### Person Parameters
+```{r}
+loo_compare(fit_1pl_nh, fit_2pl_nh, fit_3pl_fixed_nh, fit_3pl_nh, fit_4pl_nh) 
+```
+
+### Person Parameters
 
 ```{r}
 person_pars_all <- bind_rows(
   "1PL: brms" = person_pars_1pl,
-  "1PL: mirt" = mirt_person_pars_1pl, 
+  "1PL: mirt" = person_pars_1pl_ml, 
   "2PL: brms" = person_pars_2pl, 
-  "2PL: mirt" = mirt_person_pars_2pl, 
-  "3PL(f): brms" = person_pars_3pl_fixed,
-  "3PL(f): mirt" = mirt_person_pars_3pl_fixed,
+  "2PL: mirt" = person_pars_2pl_ml, 
   "3PL: brms" = person_pars_3pl,
-  "3PL: mirt" = mirt_person_pars_3pl,
+  "3PL: mirt" = person_pars_3pl_ml,
   "4PL: brms" = person_pars_4pl, 
-  "4PL: mirt" = mirt_person_pars_4pl, 
+  "4PL: mirt" = person_pars_4pl_ml, 
   .id = "model"
 ) %>%
   mutate(model = factor(model, levels = unique(model)))
@@ -1100,9 +2358,10 @@ person_pars_all %>%
   GGally::ggpairs(aes(alpha = 0.4))
 ```
 
-### 4PL models in Conditional Formulation {.tabset}
 
-#### Model Fitting
+## 4PL models in conditional formulation {.tabset}
+
+### MCMC with hierarchical item priors
 
 ```{r}
 formula_4pl_cond <- bf(
@@ -1145,8 +2404,6 @@ fit_4pl_cond <- add_loo(fit_4pl_cond)
 summary(fit_4pl_cond)
 ```
 
-#### Person Parameters
-
 ```{r}
 # extract and scale person parameters
 person_pars_4pl_cond <- 
@@ -1174,8 +2431,6 @@ person_pars_4pl_cond %>%
     axis.ticks.y = element_blank()
   )
 ```
-
-#### Item Parameters
 
 ```{r, fig.height=8}
 # extract item parameters
@@ -1229,3 +2484,4 @@ bind_rows(beta, alpha, gamma, psi, .id = "nlpar") %>%
 	coord_flip() +
 	labs(x = "Item Number")
 ```
+
