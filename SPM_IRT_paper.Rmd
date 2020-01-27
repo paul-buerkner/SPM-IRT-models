@@ -143,7 +143,7 @@ theme_hist <- function(...) {
 Raven’s Standard Progressive Matrices (SPM) test [@raven1941] and related
 matrix-based tests are widely applied measures of cognitive ability [e.g.,
 @jensen1988; @pind2003]. Due to their non-verbal content, which reduces biases
-due to language and cultural differenes, they are considered one of the purest
+due to language and cultural differences, they are considered one of the purest
 measures of fluid intelligence [@myszkowski2018]. However, a disadvantage of the
 original SPM is that its administration takes considerable time as 60 items have
 to be answered and time limits are either very loose or not imposed at all
@@ -243,7 +243,7 @@ as well as @rupp2004.
 ## Bayesian IRT models for binary data
 
 In this section, I will introduce a set of Bayesian IRT models for binary data
-and unidimensional person traits. Suppose that for each pserson $j$ ($j = 1,
+and unidimensional person traits. Suppose that for each person $j$ ($j = 1,
 \ldots, J$) and item $i$ ($i = 1, \ldots, I$), we have observed a binary
 response $y_{ji}$ which is coded as $1$ for a correct answer and $0$ otherwise.
 With binary IRT models, we aim to model $p_{ji} = P(y_{ji} = 1)$, that is,
@@ -267,7 +267,7 @@ Under this model, we express $P(y_{ji} = 1)$ via the equation
 \begin{equation}
 \label{4pl}
 P(y_{ji} = 1) = \gamma_i + (1 - \gamma_i - \psi_i) 
-  \frac{1}{1 + \exp(-(\beta_i + \alpha_i \theta_j))}
+  \frac{1}{1 + \exp(-(\beta_i + \alpha_i \theta_j))}.
 \end{equation}
 In the 4PL model, each item has four associated item parameters. The $\beta_i$
 parameter describes the location of the item, that is, how easy or difficult it
@@ -321,10 +321,10 @@ problems [e.g., @brms3; @gelman2013]. If we started by fitting the most complex
 model and, after considerable waiting time, found the model to not have
 converged, we may have no idea which of the several model components were
 causing the problem(s). In contrast, by starting simple and gradually building
-our way upwards to more complex models, we can make sure that each model
+towards more complex models, we can make sure that each model
 component is reasonbly specified and can be reliabily estimated before we move
 further. As a result, when a problem occurs, we are likely to have much clearer
-understanding of why/where the it occured and how to fix it.
+understanding of why/where it occured and how to fix it.
 
 With the model likelihood fully specified by equations (\ref{bernoulli}) and 
 (\ref{4pl}) (potentially with some fixed item parameters), we
@@ -420,7 +420,7 @@ parameters $b_i$, so that
 \end{equation} 
 
 for each observation $n$ and corresponding item $i$. Since $\eta$ is on an
-unconstrained scale so are the $b_i$ parameter and we can apply location-scale
+unconstrained scale so are the $b_i$ parameters and we can apply location-scale
 priors such as the normal distribution with mean $\mu$ and standard devation
 $\sigma$:
 
@@ -485,7 +485,7 @@ multivariate case, so that we can model the vector $\tilde{\bm{b}}_i =
 <!---->
 where $\bm{\sigma} = (\sigma_{\beta}, \sigma_{\alpha}, \sigma_{\gamma}, \sigma_{\psi})$ 
 is the vector of standard deviations and $\Omega$ is the correlation matrix
-between of the item parameters [see also @brms1; @brms3; @nalborczyk2019].
+of the item parameters [see also @brms1; @brms3; @nalborczyk2019].
 To complete the prior specification for the item parameters, we need to 
 set priors on $\overline{b}$ and $\sigma$. For this purpose, weakly-informative
 normal prior on $\overline{b}$ and half-normal priors on $\sigma$ will usually
@@ -724,11 +724,11 @@ guessing parameter estimates are quite different: ML obtains point estimates of
 0 for all but 3 items with uncertainty intervals ranging the whole definition
 space from 0 to 1. This is caused by an artifact in the computation of the
 approximate standard errors because point estimates are located at the boundary
-of the parameter space at which maximum likelhood theory does not hold. In
+of the parameter space at which maximum likelihood theory does not hold. In
 contrast, point estimates of guessing parameters as obtained by all regularized
 models are close to but not exactly zero for most items and corresponding
 uncertainty estimates appear more realistic (i.e., much narrower) then those
-obtained by mirt.
+obtained by pure ML.
 
 On Github, I also report results for the 3PL model with guessing probabilities
 fixed to $1/8$ derived under the assumptions that, in case of guessing, all
@@ -831,7 +831,7 @@ obtained due to singularity of the information matrix. It is plausible that the
 without further regularization. Moreover, the estimates obtained by MCMC-H
 and MCMC-NH differ noticably for some item parameters in the way that
 MCMC-NH estimates tend to be more extreme and uncertain as compared to MCMC-H.
-This suggests that, for these specificaly chosen hierarchical and non-hierarchical
+This suggests that, for these specifically chosen hierarchical and non-hierarchical
 priors, the former imply stronger regularization.
 
 ```{r item-pars-4pl, fig.height=8, fig.cap="Item parameters of the 4PL model. Horizontal lines indicate 95% uncertainty intervals."}
@@ -1131,7 +1131,7 @@ between all considered Bayesian and frequentist IRT models. Pairwise
 correlations between point estimates of two different models were all exceeding
 $r = 0.97$ and often even larger than $r = 0.99$. This should not imply,
 however, that the model choice does not matter in the context of person
-parameter estimation [see also @loken2010]. Although point estimates very
+parameter estimation [see also @loken2010]. Although point estimates were
 highly similar, uncertainty estimates of person parameters varied substantially
 across model classes. Thus, it is still important to choose an appropriately
 complex model for the data (i.e., the 3PL model in our case) in order to get
